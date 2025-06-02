@@ -1,0 +1,1200 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>دليلك - تطبيق السياحة</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script type="module">
+        // Firebase SDKs
+        import { initializeApp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, getDocs, doc, setDoc, getDoc, updateDoc, deleteDoc, query, where, onSnapshot, serverTimestamp, orderBy, limit } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        // Removed Firebase Storage imports as we are switching to Base64
+        // import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-storage.js";
+        import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-analytics.js";
+
+
+        // --- Firebase Configuration ---
+        const firebaseConfig = {
+          apiKey: "AIzaSyD5BSCAonqJm9Ksi0ZVPKCQ-k33KiOc1O8", 
+          authDomain: "dalelk-dc188.firebaseapp.com",          
+          projectId: "dalelk-dc188",                          
+          storageBucket: "dalelk-dc188.appspot.com", 
+          messagingSenderId: "924665918120",                  
+          appId: "1:924665918120:web:584cbfb578b3a4d06a489d", 
+          measurementId: "G-N42GFYY06Q"                       
+        };
+        console.log("Firebase Config:", firebaseConfig);
+
+        const appId = firebaseConfig.projectId; 
+        console.log("App ID for Firestore/Storage paths:", appId);
+
+        let app, auth, db, storage, analytics; 
+        let userId = null;
+        let userRole = null; 
+        let isAuthDataLoaded = false; 
+        let initialAuthCheckCompleted = false; 
+        let establishmentsListener = null; 
+
+        window.openModal = (modalId) => {
+            const modal = document.getElementById(modalId);
+            if (modal) {
+                modal.classList.remove('hidden');
+                modal.style.display = 'flex'; 
+                modal.style.opacity = '1';    
+                document.body.classList.add('overflow-hidden'); 
+                console.log(`Modal '${modalId}' opened.`);
+            } else {
+                console.error(`Modal with ID '${modalId}' not found for opening.`);
+            }
+        }
+        window.closeModal = (modalId) => {
+            const modal = document.getElementById(modalId);
+            if (modal) {
+                modal.classList.add('hidden'); 
+                modal.style.display = ''; 
+                modal.style.opacity = ''; 
+                modal.style.zIndex = '';
+                document.body.classList.remove('overflow-hidden');
+                console.log(`Modal '${modalId}' closed.`);
+            } else {
+                console.error(`Modal with ID '${modalId}' not found for closing.`);
+            }
+        }
+
+
+        try {
+            app = initializeApp(firebaseConfig);
+            setLogLevel('debug'); 
+            auth = getAuth(app);
+            db = getFirestore(app);
+            // storage = getStorage(app); 
+            analytics = getAnalytics(app); 
+            console.log("Firebase initialized successfully with Analytics. Debug logging enabled.");
+        } catch (error) {
+            console.error("Firebase initialization error:", error);
+            const mainContent = document.getElementById('main-content-area');
+            if (mainContent) {
+                mainContent.innerHTML = `<p class="text-red-600 text-center p-5 bg-red-50 rounded-lg">خطأ في تهيئة التطبيق. يرجى المحاولة مرة أخرى لاحقاً.</p>`;
+            }
+        }
+        
+        function updateUIAfterAuthChange(user) {
+            const addEstablishmentBtnContainer = document.getElementById('add-establishment-btn-container');
+            const managePaidAdsBtnContainer = document.getElementById('manage-paid-ads-btn-container');
+            const userAuthStatusDiv = document.getElementById('user-auth-status');
+            const loginRegisterBtn = document.getElementById('login-register-btn');
+            const logoutBtn = document.getElementById('logout-btn');
+
+            if (user) {
+                userId = user.uid;
+                userAuthStatusDiv.innerHTML = `<span class="font-semibold">${user.email || (user.isAnonymous ? 'زائر مجهول' : 'مستخدم حالي')}</span> <i class="fas fa-user-check text-green-400"></i>`;
+                loginRegisterBtn.classList.add('hidden');
+                logoutBtn.classList.remove('hidden');
+
+                if (!user.isAnonymous) {
+                    getDoc(doc(db, `artifacts/${appId}/users/${userId}/profile`, 'info')).then(userProfileSnap => {
+                        if (userProfileSnap.exists()) {
+                            userRole = userProfileSnap.data().role;
+                            console.log("Auth: User profile fetched. Role:", userRole);
+                            if (userRole === 'investor') addEstablishmentBtnContainer?.classList.remove('hidden'); else addEstablishmentBtnContainer?.classList.add('hidden');
+                            if (user.email === "admin@dalilak.com") managePaidAdsBtnContainer?.classList.remove('hidden'); else managePaidAdsBtnContainer?.classList.add('hidden');
+                        } else {
+                            console.warn("Auth: User profile document not found for UID:", userId);
+                            userRole = 'visitor'; 
+                            addEstablishmentBtnContainer?.classList.add('hidden');
+                            managePaidAdsBtnContainer?.classList.add('hidden');
+                        }
+                        loadAppInitialData(); 
+                    }).catch(profileError => {
+                        console.error("Auth: Error fetching user profile.", profileError);
+                        userRole = null;
+                        addEstablishmentBtnContainer?.classList.add('hidden');
+                        managePaidAdsBtnContainer?.classList.add('hidden');
+                        loadAppInitialData(); 
+                    });
+                } else {
+                     userRole = 'visitor'; 
+                     console.log("Auth: User is anonymous, assigned role 'visitor'.");
+                     addEstablishmentBtnContainer?.classList.add('hidden');
+                     managePaidAdsBtnContainer?.classList.add('hidden');
+                     loadAppInitialData(); 
+                }
+            } else { 
+                userId = null; 
+                userRole = null; 
+                console.log("Auth: No user currently signed in (or user has just logged out). UI updated for visitor.");
+                userAuthStatusDiv.innerHTML = `أنت تتصفح كـ <span class="font-semibold">زائر</span> <i class="fas fa-user-secret text-gray-400"></i>`;
+                loginRegisterBtn.classList.remove('hidden');
+                logoutBtn.classList.add('hidden');
+                addEstablishmentBtnContainer?.classList.add('hidden');
+                managePaidAdsBtnContainer?.classList.add('hidden');
+                loadAppInitialData(); 
+            }
+        }
+
+
+        onAuthStateChanged(auth, async (user) => {
+            console.log("Auth: onAuthStateChanged triggered. User object:", user);
+            isAuthDataLoaded = false; 
+
+            if (user) {
+                initialAuthCheckCompleted = true; 
+                updateUIAfterAuthChange(user);
+            } else { 
+                if (!initialAuthCheckCompleted) { 
+                    initialAuthCheckCompleted = true; 
+                    console.log("Auth: Initial app load & no active user. Attempting auto anonymous sign-in...");
+                    try {
+                        console.log("Auth: Attempting auto anonymous sign-in.");
+                        await signInAnonymously(auth);
+                        console.log("Auth: Auto anonymous sign-in successful. onAuthStateChanged will re-trigger with the new anonymous user.");
+                    } catch (anonError) {
+                        console.error("Auth: Auto anonymous sign-in FAILED.", anonError);
+                        if (anonError.code === 'auth/configuration-not-found') {
+                            console.error("CRITICAL AUTH ERROR: Anonymous sign-in failed due to 'auth/configuration-not-found'. PLEASE ENABLE ANONYMOUS AUTHENTICATION IN YOUR FIREBASE PROJECT.");
+                            document.getElementById('user-auth-status').innerHTML = `<span class="text-red-500">خطأ: المصادقة المجهولة غير مفعلة.</span>`;
+                        } else {
+                             document.getElementById('user-auth-status').innerHTML = `<span class="text-red-500">خطأ في المصادقة الأولية.</span>`;
+                        }
+                        console.log("Auth: Anonymous sign-in attempt failed. Proceeding without an authenticated user for now. Public data should still load.");
+                        updateUIAfterAuthChange(null); 
+                    }
+                } else {
+                    console.log("Auth: User has explicitly signed out. auth.currentUser is null. UI will be updated for visitor state. Ready for new login/registration.");
+                    updateUIAfterAuthChange(null); 
+                }
+            }
+        });
+
+        function loadAppInitialData() {
+            if (!isAuthDataLoaded) { 
+                console.log("DataLoad: Loading app data (establishments, paid ads) for current auth state.");
+                isAuthDataLoaded = true; 
+                loadEstablishments();
+                loadPaidAds();
+            } else {
+                 console.log("DataLoad: App data already loaded for current auth state or load in progress.");
+            }
+        }
+
+
+        const establishmentsContainer = document.getElementById('establishments-container');
+        const paidAdsBanner = document.getElementById('paid-ads-banner');
+        const categoryFilter = document.getElementById('category-filter');
+        const governorateFilter = document.getElementById('governorate-filter');
+        const loadingIndicator = document.getElementById('loading-indicator');
+        const noResultsMessage = document.getElementById('no-results-message');
+
+        const categories = ["الكل", "مطعم", "فندق", "مقهى", "شاطئ", "جبل", "غابة", "متحف", "مسبح", "نهر", "معلم أثري", "منتزه", "سوق شعبي", "أخرى"];
+        const governorates = [
+            "الكل", "دمشق", "ريف دمشق", "حلب", "حمص", "حماة", "اللاذقية", "طرطوس", 
+            "دير الزور", "الحسكة", "الرقة", "إدلب", "السويداء", "درعا", "القنيطرة"
+        ];
+
+        function populateFilters() {
+            if (!categoryFilter || !governorateFilter) return;
+            categoryFilter.innerHTML = ''; 
+            governorateFilter.innerHTML = ''; 
+
+            categories.forEach(cat => {
+                const option = document.createElement('option');
+                option.value = cat === "الكل" ? "" : cat;
+                option.textContent = cat;
+                categoryFilter.appendChild(option);
+            });
+            governorates.forEach(gov => {
+                const option = document.createElement('option');
+                option.value = gov === "الكل" ? "" : gov;
+                option.textContent = gov;
+                governorateFilter.appendChild(option);
+            });
+
+            categoryFilter.addEventListener('change', loadEstablishments);
+            governorateFilter.addEventListener('change', loadEstablishments);
+        }
+        
+        async function loadEstablishments() {
+             if (!initialAuthCheckCompleted) { 
+                 console.warn("LoadEstablishments: Initial auth check not yet completed. Deferring load.");
+                 return;
+            }
+            if (!db || !establishmentsContainer) {
+                 console.error("LoadEstablishments: DB not initialized or container not found.");
+                 return;
+            }
+
+            console.log("LoadEstablishments: Called.");
+            showLoading(true);
+            establishmentsContainer.innerHTML = ''; 
+            noResultsMessage.classList.add('hidden');
+
+            const selectedCategory = categoryFilter.value;
+            const selectedGovernorate = governorateFilter.value;
+            
+            try {
+                const publicEstablishmentsPath = `artifacts/${appId}/public/data/establishments`;
+                const q = query(
+                    collection(db, publicEstablishmentsPath), 
+                    where("status", "==", "approved"), 
+                    orderBy("publishedAt", "desc"), 
+                    limit(50) 
+                ); 
+                
+                if (establishmentsListener) establishmentsListener(); 
+                
+                establishmentsListener = onSnapshot(q, (querySnapshot) => {
+                    showLoading(false);
+                    let filteredDocs = [];
+                    querySnapshot.forEach((doc) => {
+                        const establishmentData = doc.data();
+                        let matchesCategory = !selectedCategory || establishmentData.category === selectedCategory;
+                        let matchesGovernorate = !selectedGovernorate || establishmentData.governorate === selectedGovernorate;
+                        if (matchesCategory && matchesGovernorate) {
+                            filteredDocs.push({ id: doc.id, data: establishmentData });
+                        }
+                    });
+
+                    establishmentsContainer.innerHTML = ''; 
+                    if (filteredDocs.length === 0) {
+                        noResultsMessage.classList.remove('hidden');
+                        return;
+                    }
+                    filteredDocs.forEach(docInfo => renderEstablishmentCard(docInfo.id, docInfo.data));
+                }, (error) => {
+                    console.error("LoadEstablishments: Error in onSnapshot.", error);
+                    showLoading(false);
+                    let errorMessageText = `خطأ في تحميل المنشآت: ${error.message}.`;
+                    if (error.code === 'failed-precondition' && error.message.toLowerCase().includes('index')) {
+                        const indexCreationLinkMatch = error.message.match(/https:\/\/console\.firebase\.google\.com\/v1\/r\/project\/[^/]+\/firestore\/indexes\?create_composite=[^\s]+/);
+                        const indexCreationLink = indexCreationLinkMatch ? indexCreationLinkMatch[0] : null;
+
+                        errorMessageText = `
+                            <div class="p-4 bg-red-100 border-l-4 border-red-500 text-red-700 rounded-md">
+                                <h3 class="font-bold">خطأ في قاعدة البيانات!</h3>
+                                <p>الاستعلام يتطلب فهرسًا غير موجود في Firestore.</p>
+                                <p class="mt-2"><strong>الحل:</strong> يرجى الانتقال إلى وحدة تحكم Firebase لمشروعك وإنشاء الفهرس المطلوب. 
+                                ${indexCreationLink ? `يمكنك محاولة استخدام <a href="${indexCreationLink}" target="_blank" class="font-bold text-blue-600 hover:underline">هذا الرابط</a> لإنشائه.` : 'عادةً ما توفر رسالة الخطأ في وحدة تحكم المتصفح رابطًا مباشرًا لإنشاء هذا الفهرس.'}
+                                </p>
+                                <p class="mt-1">الفهرس المطلوب غالبًا ما يكون على مجموعة 'establishments' للحقول 'status' (تصاعدي) و 'publishedAt' (تنازلي).</p>
+                                <p class="mt-2">بعد إنشاء الفهرس، قد يستغرق الأمر بضع دقائق حتى يتم تفعيله. يرجى تحديث الصفحة بعد ذلك.</p>
+                            </div>`;
+                        establishmentsContainer.innerHTML = errorMessageText;
+                    } else {
+                         establishmentsContainer.innerHTML = `<p class="text-red-600 p-4 bg-red-50 rounded-md">${errorMessageText}</p>`;
+                    }
+                });
+            } catch (error) {
+                console.error("LoadEstablishments: Error setting up query.", error);
+                showLoading(false);
+                establishmentsContainer.innerHTML = `<p class="text-red-600 p-4 bg-red-50 rounded-md">خطأ فادح في إعداد الاستعلام: ${error.message}</p>`;
+            }
+        }
+
+        function renderEstablishmentCard(id, data) {
+            const card = document.createElement('div');
+            card.className = 'bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-2xl transition-all duration-300 ease-in-out flex flex-col group';
+            
+            const name = data.name ? String(data.name).replace(/</g, "&lt;").replace(/>/g, "&gt;") : 'اسم غير متوفر';
+            const description = data.description ? String(data.description).substring(0, 120).replace(/</g, "&lt;").replace(/>/g, "&gt;") + (data.description.length > 120 ? '...' : '') : 'لا يوجد وصف';
+            const imageUrl = data.photos && data.photos.length > 0 && typeof data.photos[0] === 'string' && data.photos[0].startsWith('data:image') 
+                             ? data.photos[0] 
+                             : `https://placehold.co/600x400/E2E8F0/4A5568?text=${encodeURIComponent(name)}&font=cairo`;
+            const averageRating = data.averageRating ? parseFloat(data.averageRating).toFixed(1) : '0.0';
+            const ratingCount = data.ratingCount || 0;
+
+            card.innerHTML = `
+                <div class="relative">
+                    <img src="${imageUrl}" alt="${name}" class="w-full h-56 object-cover group-hover:scale-105 transition-transform duration-300" onerror="this.onerror=null;this.src='https://placehold.co/600x400/E2E8F0/4A5568?text=خطأ+في+الصورة&font=cairo';">
+                    <div class="absolute top-2 right-2 bg-indigo-600 text-white text-xs font-semibold px-2.5 py-1 rounded-full shadow-md">${data.category || 'فئة'}</div>
+                </div>
+                <div class="p-5 flex flex-col flex-grow">
+                    <h3 class="text-xl lg:text-2xl font-bold text-gray-800 group-hover:text-indigo-600 transition-colors duration-300 mb-2">${name}</h3>
+                    <p class="text-gray-600 text-sm mb-3 flex-grow leading-relaxed">${description}</p>
+                    <div class="flex items-center justify-between text-sm text-gray-500 mb-4">
+                        <span class="flex items-center">
+                            <i class="fas fa-star text-amber-400 mr-1"></i>
+                            <span class="font-bold text-amber-500">${averageRating}</span> 
+                            <span class="mx-1 text-gray-400">(${ratingCount} تقييمات)</span>
+                        </span>
+                        <span class="flex items-center">
+                            <i class="fas fa-map-marker-alt text-red-500 mr-1"></i> ${data.governorate || 'غير محدد'}
+                        </span>
+                    </div>
+                     <button data-establishment-id="${id}" class="show-details-btn btn-primary w-full text-base">
+                        <i class="fas fa-info-circle mr-2"></i>عرض التفاصيل
+                     </button>
+                </div>
+            `;
+            if (establishmentsContainer) establishmentsContainer.appendChild(card);
+        }
+
+        window.showEstablishmentDetails = async (establishmentId) => {
+            try {
+                const establishmentRef = doc(db, `artifacts/${appId}/public/data/establishments`, establishmentId);
+                const docSnap = await getDoc(establishmentRef);
+
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    const name = data.name ? String(data.name).replace(/</g, "&lt;").replace(/>/g, "&gt;") : 'اسم غير متوفر';
+                    const description = data.description ? String(data.description).replace(/</g, "&lt;").replace(/>/g, "&gt;") : 'لا يوجد وصف';
+                    const averageRating = data.averageRating ? parseFloat(data.averageRating).toFixed(1) : '0.0';
+                    const ratingCount = data.ratingCount || 0;
+                    
+                    let photosHtml = `<div class="grid grid-cols-1 sm:grid-cols-${Math.min(data.photos?.length || 1, 2)} gap-2 my-3">`;
+                    if (data.photos && data.photos.length > 0) {
+                        data.photos.slice(0,2).forEach(photoDataUrl => { 
+                            if (typeof photoDataUrl === 'string' && photoDataUrl.startsWith('data:image')) {
+                                photosHtml += `<img src="${photoDataUrl}" alt="${name}" class="w-full h-40 object-cover rounded-md shadow-sm" onerror="this.style.display='none';">`;
+                            }
+                        });
+                    } else {
+                         photosHtml += `<img src="https://placehold.co/300x200/E2E8F0/4A5568?text=${encodeURIComponent(name)}&font=cairo" alt="${name}" class="w-full h-40 object-cover rounded-md shadow-sm col-span-full" onerror="this.style.display='none';">`;
+                    }
+                    photosHtml += '</div>';
+
+                    const swalHtml = `
+                        <div class="text-right">
+                            ${photosHtml}
+                            <p class="my-1"><strong class="font-semibold text-gray-700">الوصف:</strong> ${description}</p>
+                            <p class="my-1"><strong class="font-semibold text-gray-700">المحافظة:</strong> ${data.governorate || 'غير محدد'}</p>
+                            <p class="my-1"><strong class="font-semibold text-gray-700">الفئة:</strong> ${data.category || 'غير محدد'}</p>
+                            <p class="my-1"><strong class="font-semibold text-gray-700">الموقع:</strong> ${data.location || 'غير محدد'}</p>
+                            <p class="text-amber-500 font-bold text-lg my-2"><i class="fas fa-star mr-1"></i> التقييم: ${averageRating} (${ratingCount} تقييمات)</p>
+                            
+                            <div class="mt-4 border-t border-gray-200 pt-3">
+                                <h3 class="text-md font-semibold mb-2 text-gray-700">أضف تقييمك</h3>
+                                <select id="swal-rating-satisfaction-${establishmentId}" class="swal2-input mb-2 w-full p-2 border rounded">
+                                    <option value="5">⭐⭐⭐⭐⭐ (ممتاز)</option>
+                                    <option value="4">⭐⭐⭐⭐ (جيد جداً)</option>
+                                    <option value="3" selected>⭐⭐⭐ (جيد)</option>
+                                    <option value="2">⭐⭐ (مقبول)</option>
+                                    <option value="1">⭐ (سيء)</option>
+                                </select>
+                                <textarea id="swal-rating-comment-${establishmentId}" class="swal2-textarea mb-2 w-full p-2 border rounded" rows="2" placeholder="اكتب تعليقك هنا..."></textarea>
+                                <button id="swal-submit-rating-btn-${establishmentId}" class="swal2-confirm swal2-styled bg-green-500 hover:bg-green-600" style="background-color: #28a745;">إرسال التقييم</button>
+                                <div id="swal-submit-rating-feedback-${establishmentId}" class="text-sm mt-1"></div>
+                            </div>
+                            <div id="swal-ratings-list-${establishmentId}" class="mt-3 pt-3 border-t border-gray-200 max-h-40 overflow-y-auto">
+                                </div>
+                        </div>
+                    `;
+
+                    Swal.fire({
+                        title: `<strong class="text-2xl text-indigo-600">${name}</strong>`,
+                        html: swalHtml,
+                        showCloseButton: true,
+                        showConfirmButton: false, 
+                        width: '90%',
+                        maxWidth: '600px',
+                        didOpen: () => {
+                            const submitBtn = document.getElementById(`swal-submit-rating-btn-${establishmentId}`);
+                            if(submitBtn) {
+                                submitBtn.addEventListener('click', () => submitRating(establishmentId, true)); 
+                            }
+                            loadRatingsForEstablishment(establishmentId, true); 
+                        }
+                    });
+
+                } else {
+                     Swal.fire('خطأ', 'لم يتم العثور على تفاصيل المنشأة.', 'error');
+                }
+            } catch (error) {
+                console.error("Error fetching establishment details for Swal:", error);
+                Swal.fire('خطأ', `حدث خطأ أثناء تحميل التفاصيل: ${error.message}`, 'error');
+            }
+        };
+        
+        async function loadRatingsForEstablishment(establishmentId, isSwal = false) {
+            const listIdSuffix = isSwal ? `swal-ratings-list-${establishmentId}` : `ratings-list-${establishmentId}`; 
+            const ratingsListDiv = document.getElementById(listIdSuffix);
+
+            if (!ratingsListDiv || !db) return;
+            ratingsListDiv.innerHTML = '<p class="text-gray-500 italic text-xs">جاري تحميل التقييمات...</p>';
+
+            try {
+                const ratingsPath = `artifacts/${appId}/public/data/ratings`;
+                const q = query(collection(db, ratingsPath), where("establishmentId", "==", establishmentId), orderBy("createdAt", "desc"), limit(5));
+                
+                onSnapshot(q, (querySnapshot) => {
+                    if (querySnapshot.empty) {
+                        ratingsListDiv.innerHTML = `<p class="text-gray-500 italic text-xs p-1 ${isSwal ? '' : 'bg-gray-50 rounded-md'}">لا توجد تقييمات بعد.</p>`;
+                        return;
+                    }
+                    ratingsListDiv.innerHTML = `<h4 class="text-sm font-semibold mb-1 text-gray-600 ${isSwal ? '' : 'text-xl'}">التقييمات:</h4><div class="space-y-2">`;
+                    querySnapshot.forEach((doc) => {
+                        const rating = doc.data();
+                        const ratingDiv = document.createElement('div');
+                        ratingDiv.className = `p-1.5 ${isSwal ? '' : 'bg-white rounded-lg shadow-sm border border-gray-200'} text-xs`;
+                        const stars = '⭐'.repeat(rating.satisfactionLevel || 0);
+                        const comment = rating.comment ? String(rating.comment).replace(/</g, "&lt;").replace(/>/g, "&gt;") : '<em>لا يوجد تعليق</em>';
+                        const visitorName = rating.visitorName ? String(rating.visitorName).replace(/</g, "&lt;").replace(/>/g, "&gt;") : 'زائر';
+                        let date = '';
+                        if (rating.createdAt && typeof rating.createdAt.seconds === 'number') {
+                             date = new Date(rating.createdAt.seconds * 1000).toLocaleDateString('ar-SY', { month: 'short', day: 'numeric' });
+                        }
+
+                        ratingDiv.innerHTML = `
+                            <div class="flex justify-between items-center mb-0.5">
+                                <p class="font-semibold text-gray-700">${visitorName} <span class="text-amber-400 ml-0.5">${stars}</span></p>
+                                <span class="text-xs text-gray-400">${date}</span>
+                            </div>
+                            <p class="text-xs text-gray-600">${comment}</p>
+                        `;
+                        ratingsListDiv.appendChild(ratingDiv);
+                    });
+                    ratingsListDiv.innerHTML += '</div>'; 
+                }, (error) => {
+                    console.error("Error loading ratings in onSnapshot:", error);
+                    let errorMsg = "خطأ تحميل التقييمات.";
+                     if (error.code === 'failed-precondition' && error.message.toLowerCase().includes('index')) {
+                        errorMsg = "يتطلب الاستعلام فهرسًا. يرجى مراجعة وحدة التحكم لإنشائه.";
+                    }
+                    ratingsListDiv.innerHTML = `<p class="text-red-600 text-xs p-1 ${isSwal ? '' : 'bg-red-50 rounded-md'}">${errorMsg}</p>`;
+                });
+            } catch (error) {
+                 console.error("Error setting up ratings query:", error);
+                 ratingsListDiv.innerHTML = `<p class="text-red-600 text-xs p-1 ${isSwal ? '' : 'bg-red-50 rounded-md'}">خطأ فادح في تحميل التقييمات.</p>`;
+            }
+        }
+
+        window.submitRating = async (establishmentId, isSwal = false) => {
+            const feedbackIdSuffix = isSwal ? `swal-submit-rating-feedback-${establishmentId}` : `submit-rating-feedback-${establishmentId}`;
+            const satisfactionIdSuffix = isSwal ? `swal-rating-satisfaction-${establishmentId}` : `rating-satisfaction-${establishmentId}`;
+            const commentIdSuffix = isSwal ? `swal-rating-comment-${establishmentId}` : `rating-comment-${establishmentId}`;
+
+            const feedbackDiv = document.getElementById(feedbackIdSuffix);
+            if (!feedbackDiv) return;
+            feedbackDiv.textContent = ''; 
+
+            if (!initialAuthCheckCompleted || !db || !auth.currentUser) { 
+                 feedbackDiv.textContent = 'يجب تسجيل الدخول لتقديم تقييم.';
+                 feedbackDiv.className = 'text-red-600 text-xs mt-1';
+                 return;
+            }
+            const satisfactionLevelEl = document.getElementById(satisfactionIdSuffix);
+            const commentEl = document.getElementById(commentIdSuffix);
+
+            if (!satisfactionLevelEl || !commentEl) return;
+
+            const satisfactionLevel = satisfactionLevelEl.value;
+            const comment = commentEl.value.trim();
+
+            if (!satisfactionLevel) {
+                feedbackDiv.textContent = 'يرجى اختيار مستوى الرضا.';
+                feedbackDiv.className = 'text-red-600 text-xs mt-1';
+                return;
+            }
+            
+            feedbackDiv.textContent = 'جاري الإرسال...';
+            feedbackDiv.className = 'text-indigo-600 text-xs mt-1';
+
+            try {
+                const ratingsPath = `artifacts/${appId}/public/data/ratings`;
+                await addDoc(collection(db, ratingsPath), {
+                    establishmentId: establishmentId,
+                    userId: auth.currentUser.uid,
+                    visitorName: auth.currentUser.displayName || (auth.currentUser.email ? auth.currentUser.email.split('@')[0] : '') || 'مستخدم مسجل',
+                    satisfactionLevel: parseInt(satisfactionLevel),
+                    comment: comment,
+                    createdAt: serverTimestamp()
+                });
+
+                const establishmentRef = doc(db, `artifacts/${appId}/public/data/establishments`, establishmentId);
+                const establishmentDoc = await getDoc(establishmentRef);
+
+                if (establishmentDoc.exists()) {
+                    const data = establishmentDoc.data();
+                    const currentTotalRatingPoints = (data.averageRating || 0) * (data.ratingCount || 0);
+                    const newRatingCount = (data.ratingCount || 0) + 1;
+                    const newAverageRating = (currentTotalRatingPoints + parseInt(satisfactionLevel)) / newRatingCount;
+                    
+                    await updateDoc(establishmentRef, {
+                        averageRating: newAverageRating,
+                        ratingCount: newRatingCount
+                    });
+                }
+                
+                feedbackDiv.textContent = 'تم إرسال تقييمك بنجاح!';
+                feedbackDiv.className = 'text-green-600 text-xs mt-1';
+                commentEl.value = ''; 
+                if (isSwal) loadRatingsForEstablishment(establishmentId, true); 
+
+            } catch (error) {
+                feedbackDiv.textContent = `حدث خطأ: ${error.message}`;
+                feedbackDiv.className = 'text-red-600 text-xs mt-1';
+            }
+        };
+        
+        async function loadPaidAds() {
+            if (!initialAuthCheckCompleted || !db || !paidAdsBanner) return;
+            paidAdsBanner.innerHTML = ''; 
+
+            try {
+                const publicEstablishmentsPath = `artifacts/${appId}/public/data/establishments`;
+                const q = query(collection(db, publicEstablishmentsPath), where("isPaidAd", "==", true), where("status", "==", "approved"), limit(3));
+                const querySnapshot = await getDocs(q);
+
+                if (querySnapshot.empty) {
+                    paidAdsBanner.classList.add('hidden'); 
+                    return;
+                }
+                
+                paidAdsBanner.classList.remove('hidden'); 
+                let adHtml = '<div class="bg-amber-50 border-l-4 border-amber-400 text-amber-800 p-4 rounded-lg shadow-md" role="alert">';
+                adHtml += '<h3 class="font-bold mb-2 text-amber-900 flex items-center"><i class="fas fa-bullhorn mr-2"></i>إعلانات مميزة</h3><ul class="space-y-1.5">';
+                querySnapshot.forEach((docSnap) => { 
+                    const ad = docSnap.data();
+                    const adName = ad.name ? String(ad.name).replace(/</g, "&lt;").replace(/>/g, "&gt;") : "إعلان";
+                    const adDesc = ad.description ? String(ad.description).substring(0,60).replace(/</g, "&lt;").replace(/>/g, "&gt;") + '...' : "";
+                    adHtml += `<li class="text-sm cursor-pointer hover:underline hover:text-amber-900 transition-colors" data-establishment-id="${docSnap.id}"><span class="font-semibold">${adName}</span> - ${adDesc}</li>`;
+                });
+                adHtml += '</ul></div>';
+                paidAdsBanner.innerHTML = adHtml;
+                
+                paidAdsBanner.querySelectorAll('li[data-establishment-id]').forEach(item => {
+                    item.addEventListener('click', (e) => {
+                        const estId = e.currentTarget.dataset.establishmentId;
+                        if(estId) window.showEstablishmentDetails(estId);
+                    });
+                });
+
+
+            } catch (error) {
+                console.error("Error fetching paid ads: ", error);
+                paidAdsBanner.innerHTML = `<p class="text-red-600 text-center p-3 bg-red-50 rounded">خطأ في تحميل الإعلانات.</p>`;
+                paidAdsBanner.classList.remove('hidden'); 
+            }
+        }
+
+        function showLoading(isLoading) {
+            if (loadingIndicator) {
+                loadingIndicator.style.display = isLoading ? 'flex' : 'none';
+            }
+        }
+        
+        // --- SweetAlert based Auth Modals ---
+        function showLoginModal() {
+            Swal.fire({
+                title: '<strong class="text-2xl text-indigo-600">تسجيل الدخول</strong>',
+                html: `
+                    <div class="text-right space-y-4 p-2">
+                        <div>
+                            <label for="swal-login-email" class="label-text mb-1">البريد الإلكتروني:</label>
+                            <input type="email" id="swal-login-email" required placeholder="example@mail.com" class="input-field w-full">
+                        </div>
+                        <div>
+                            <label for="swal-login-password" class="label-text mb-1">كلمة المرور:</label>
+                            <input type="password" id="swal-login-password" required placeholder="••••••••" class="input-field w-full">
+                        </div>
+                        <div id="swal-login-feedback" class="feedback-error text-xs min-h-[18px]"></div>
+                    </div>
+                `,
+                confirmButtonText: '<i class="fas fa-sign-in-alt mr-2"></i>دخول',
+                confirmButtonColor: '#4CAF50', 
+                showCancelButton: true,
+                cancelButtonText: 'إلغاء',
+                focusConfirm: false,
+                showLoaderOnConfirm: true,
+                customClass: {
+                    popup: 'rounded-xl',
+                    actions: 'w-full flex justify-between',
+                    confirmButton: 'btn-primary bg-green-500 hover:bg-green-600 focus:ring-green-500',
+                    cancelButton: 'btn-secondary'
+                },
+                footer: '<a href="#" id="swal-switch-to-register" class="text-indigo-600 hover:underline text-sm">ليس لديك حساب؟ أنشئ حساباً جديداً</a>',
+                didOpen: () => {
+                    document.getElementById('swal-switch-to-register')?.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        Swal.close();
+                        showRegisterModal();
+                    });
+                },
+                preConfirm: async () => {
+                    const email = Swal.getPopup().querySelector('#swal-login-email').value;
+                    const password = Swal.getPopup().querySelector('#swal-login-password').value;
+                    const feedbackDiv = Swal.getPopup().querySelector('#swal-login-feedback');
+                    feedbackDiv.textContent = '';
+
+                    if (!email || !password) {
+                        Swal.showValidationMessage('يرجى ملء جميع الحقول');
+                        return false;
+                    }
+                    try {
+                        await signInWithEmailAndPassword(auth, email, password);
+                        return true; 
+                    } catch (error) {
+                        console.error("Swal Login error:", error);
+                        let errorMessage = "فشل تسجيل الدخول. يرجى التحقق من البيانات.";
+                        if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+                            errorMessage = "البريد الإلكتروني أو كلمة المرور غير صحيحة.";
+                        }
+                        Swal.showValidationMessage(errorMessage);
+                        feedbackDiv.textContent = errorMessage; 
+                        return false; 
+                    }
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    Swal.fire('تم بنجاح!', 'تم تسجيل دخولك بنجاح.', 'success');
+                }
+            });
+        }
+
+        function showRegisterModal() {
+            Swal.fire({
+                title: '<strong class="text-2xl text-indigo-600">إنشاء حساب جديد</strong>',
+                html: `
+                    <div class="text-right space-y-3 p-1">
+                        <div>
+                            <label for="swal-register-name" class="label-text mb-1">الاسم الكامل:</label>
+                            <input type="text" id="swal-register-name" required class="input-field w-full">
+                        </div>
+                        <div>
+                            <label for="swal-register-email" class="label-text mb-1">البريد الإلكتروني:</label>
+                            <input type="email" id="swal-register-email" required placeholder="example@mail.com" class="input-field w-full">
+                        </div>
+                        <div>
+                            <label for="swal-register-password" class="label-text mb-1">كلمة المرور (6 أحرف على الأقل):</label>
+                            <input type="password" id="swal-register-password" required minlength="6" class="input-field w-full">
+                        </div>
+                        <div>
+                            <label class="label-text mb-1">نوع الحساب:</label>
+                            <div class="mt-1.5 space-y-1 sm:space-y-0 sm:flex sm:space-x-4 sm:space-x-reverse">
+                                <div class="flex items-center">
+                                    <input id="swal-role-investor" name="swal-account-type" type="radio" value="investor" required class="h-4 w-4 text-indigo-600 border-gray-300 focus:ring-indigo-500">
+                                    <label for="swal-role-investor" class="mr-2 block text-sm text-gray-700">مستثمر (صاحب منشأة)</label>
+                                </div>
+                                <div class="flex items-center">
+                                    <input id="swal-role-visitor" name="swal-account-type" type="radio" value="visitor" required class="h-4 w-4 text-indigo-600 border-gray-300 focus:ring-indigo-500">
+                                    <label for="swal-role-visitor" class="mr-2 block text-sm text-gray-700">زائر (سائح)</label>
+                                </div>
+                            </div>
+                            <div id="swal-role-feedback" class="feedback-error text-xs min-h-[18px] mt-1"></div>
+                        </div>
+                        <div id="swal-register-feedback" class="feedback-error text-xs min-h-[18px]"></div>
+                    </div>
+                `,
+                confirmButtonText: '<i class="fas fa-user-plus mr-2"></i>إنشاء حساب',
+                showCancelButton: true,
+                cancelButtonText: 'إلغاء',
+                focusConfirm: false,
+                showLoaderOnConfirm: true,
+                 customClass: {
+                    popup: 'rounded-xl',
+                    actions: 'w-full flex justify-between',
+                    confirmButton: 'btn-primary',
+                    cancelButton: 'btn-secondary'
+                },
+                footer: '<a href="#" id="swal-switch-to-login" class="text-indigo-600 hover:underline text-sm">لديك حساب بالفعل؟ سجل الدخول</a>',
+                didOpen: () => {
+                    document.getElementById('swal-switch-to-login')?.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        Swal.close();
+                        showLoginModal();
+                    });
+                },
+                preConfirm: async () => {
+                    const name = Swal.getPopup().querySelector('#swal-register-name').value;
+                    const email = Swal.getPopup().querySelector('#swal-register-email').value;
+                    const password = Swal.getPopup().querySelector('#swal-register-password').value;
+                    const selectedRoleInput = Swal.getPopup().querySelector('input[name="swal-account-type"]:checked');
+                    const feedbackDiv = Swal.getPopup().querySelector('#swal-register-feedback');
+                    const roleFeedbackDiv = Swal.getPopup().querySelector('#swal-role-feedback');
+                    feedbackDiv.textContent = '';
+                    roleFeedbackDiv.textContent = '';
+
+                    if (!name || !email || !password) {
+                        Swal.showValidationMessage('يرجى ملء جميع الحقول الإلزامية.');
+                        return false;
+                    }
+                     if (!selectedRoleInput) {
+                        roleFeedbackDiv.textContent = 'يرجى اختيار نوع الحساب.';
+                        Swal.showValidationMessage('يرجى اختيار نوع الحساب.'); 
+                        return false;
+                    }
+                    const role = selectedRoleInput.value;
+
+                    try {
+                        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                        const userDocRef = doc(db, `artifacts/${appId}/users/${userCredential.user.uid}/profile`, 'info');
+                        await setDoc(userDocRef, {
+                            name: name,
+                            email: email,
+                            role: role, 
+                            createdAt: serverTimestamp()
+                        });
+                        return true; 
+                    } catch (error) {
+                        console.error("Swal Registration error:", error);
+                        let errorMessage = "فشل إنشاء الحساب.";
+                        if (error.code === 'auth/email-already-in-use') {
+                            errorMessage = "هذا البريد الإلكتروني مسجل مسبقاً.";
+                        } else if (error.code === 'auth/weak-password') {
+                            errorMessage = "كلمة المرور ضعيفة جداً.";
+                        }
+                        Swal.showValidationMessage(errorMessage);
+                        feedbackDiv.textContent = errorMessage;
+                        return false; 
+                    }
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    Swal.fire('تم بنجاح!', 'تم إنشاء حسابك وتسجيل دخولك.', 'success');
+                }
+            });
+        }
+
+        function showAddEstablishmentModal() {
+            let categoryOptionsHtml = categories.slice(1).map(cat => `<option value="${cat}">${cat}</option>`).join('');
+            let governorateOptionsHtml = governorates.slice(1).map(gov => `<option value="${gov}">${gov}</option>`).join('');
+
+            Swal.fire({
+                title: '<strong class="text-2xl text-indigo-600">إضافة منشأة جديدة</strong>',
+                html: `
+                    <form id="swal-add-establishment-form" class="text-right space-y-4 p-1">
+                        <div>
+                            <label for="swal-establishment-name" class="label-text mb-1">اسم المنشأة:</label>
+                            <input type="text" id="swal-establishment-name" required class="input-field w-full">
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-4">
+                            <div>
+                                <label for="swal-establishment-category" class="label-text mb-1">التصنيف:</label>
+                                <select id="swal-establishment-category" required class="input-field w-full">
+                                    <option value="" disabled selected>اختر التصنيف</option>
+                                    ${categoryOptionsHtml}
+                                </select>
+                            </div>
+                            <div>
+                                <label for="swal-establishment-governorate" class="label-text mb-1">المحافظة:</label>
+                                <select id="swal-establishment-governorate" required class="input-field w-full">
+                                    <option value="" disabled selected>اختر المحافظة</option>
+                                    ${governorateOptionsHtml}
+                                </select>
+                            </div>
+                        </div>
+                        <div>
+                            <label for="swal-establishment-description" class="label-text mb-1">وصف المنشأة:</label>
+                            <textarea id="swal-establishment-description" rows="3" required class="input-field w-full"></textarea>
+                        </div>
+                        <div>
+                            <label for="swal-establishment-location" class="label-text mb-1">الموقع (نص وصفي أو رابط خريطة):</label>
+                            <input type="text" id="swal-establishment-location" required class="input-field w-full">
+                        </div>
+                        <div>
+                            <label for="swal-establishment-photos" class="label-text mb-1">صور المنشأة (5 كحد أقصى, 1MB لكل صورة بعد الضغط):</label>
+                            <input type="file" id="swal-establishment-photos" multiple accept="image/jpeg, image/png, image/gif" class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border file:border-gray-300 file:text-sm file:font-medium file:bg-gray-50 file:text-gray-700 hover:file:bg-gray-100">
+                        </div>
+                        <div id="swal-add-establishment-feedback" class="feedback-error text-xs min-h-[18px]"></div>
+                    </form>
+                `,
+                confirmButtonText: '<i class="fas fa-plus-circle mr-2"></i>إضافة المنشأة',
+                showCancelButton: true,
+                cancelButtonText: 'إلغاء',
+                focusConfirm: false,
+                showLoaderOnConfirm: true,
+                width: '90%',
+                maxWidth: '700px', 
+                customClass: {
+                    popup: 'rounded-xl',
+                    actions: 'w-full flex justify-between mt-4', 
+                    confirmButton: 'btn-primary bg-amber-500 hover:bg-amber-600 focus:ring-amber-500',
+                    cancelButton: 'btn-secondary'
+                },
+                preConfirm: async () => {
+                    const form = Swal.getPopup().querySelector('#swal-add-establishment-form');
+                    const feedbackDiv = Swal.getPopup().querySelector('#swal-add-establishment-feedback');
+                    feedbackDiv.textContent = '';
+
+                    if (!auth.currentUser || userRole !== 'investor') {
+                        Swal.showValidationMessage("يجب تسجيل الدخول بحساب مستثمر لإضافة منشأة.");
+                        return false;
+                    }
+
+                    const name = form.querySelector('#swal-establishment-name').value;
+                    const description = form.querySelector('#swal-establishment-description').value;
+                    const location = form.querySelector('#swal-establishment-location').value;
+                    const category = form.querySelector('#swal-establishment-category').value;
+                    const governorate = form.querySelector('#swal-establishment-governorate').value;
+                    const photosInput = form.querySelector('#swal-establishment-photos');
+
+                    if (!name || !description || !location || !category || !governorate) {
+                        Swal.showValidationMessage("يرجى ملء جميع الحقول المطلوبة.");
+                        return false;
+                    }
+                    
+                    feedbackDiv.className = 'feedback-info text-xs'; 
+                    feedbackDiv.textContent = 'جاري إضافة المنشأة...';
+
+                    try {
+                        let photoBase64Strings = [];
+                        if (photosInput.files.length > 0) {
+                            if (photosInput.files.length > 5) {
+                                Swal.showValidationMessage("يمكن تحميل 5 صور كحد أقصى.");
+                                return false;
+                            }
+                            for (const file of photosInput.files) {
+                                if (file.size > 1 * 1024 * 1024) { 
+                                    Swal.showValidationMessage(`حجم الملف ${file.name} كبير جداً (الحد الأقصى 1MB للصور قبل الضغط).`);
+                                    return false;
+                                }
+                                const compressedBase64 = await new Promise((resolve, reject) => {
+                                    const reader = new FileReader();
+                                    reader.onload = (event) => {
+                                        const img = new Image();
+                                        img.onload = () => {
+                                            const canvas = document.createElement('canvas');
+                                            const MAX_WIDTH = 800; 
+                                            const MAX_HEIGHT = 600; 
+                                            let width = img.width;
+                                            let height = img.height;
+
+                                            if (width > height) {
+                                                if (width > MAX_WIDTH) {
+                                                    height *= MAX_WIDTH / width;
+                                                    width = MAX_WIDTH;
+                                                }
+                                            } else {
+                                                if (height > MAX_HEIGHT) {
+                                                    width *= MAX_HEIGHT / height;
+                                                    height = MAX_HEIGHT;
+                                                }
+                                            }
+                                            canvas.width = width;
+                                            canvas.height = height;
+                                            const ctx = canvas.getContext('2d');
+                                            ctx.drawImage(img, 0, 0, width, height);
+                                            resolve(canvas.toDataURL('image/jpeg', 0.7)); 
+                                        };
+                                        img.onerror = reject;
+                                        img.src = event.target.result;
+                                    };
+                                    reader.onerror = reject;
+                                    reader.readAsDataURL(file);
+                                });
+                                photoBase64Strings.push(compressedBase64);
+                            }
+                        }
+                        
+                        const publicEstablishmentsPath = `artifacts/${appId}/public/data/establishments`;
+                        await addDoc(collection(db, publicEstablishmentsPath), {
+                            ownerId: auth.currentUser.uid, ownerEmail: auth.currentUser.email, 
+                            name, description, location, category, governorate,
+                            photos: photoBase64Strings, 
+                            averageRating: 0, ratingCount: 0, isPaidAd: false, 
+                            publishedAt: serverTimestamp(), status: "pending" 
+                        });
+                        return true; 
+                    } catch (error) {
+                        console.error("Swal Add Establishment error:", error);
+                        Swal.showValidationMessage(`خطأ في إضافة المنشأة: ${error.message}`);
+                        feedbackDiv.className = 'feedback-error text-xs';
+                        feedbackDiv.textContent = `خطأ: ${error.message}`;
+                        return false; 
+                    }
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    Swal.fire('تم بنجاح!', 'تمت إضافة المنشأة بنجاح! ستظهر بعد المراجعة والموافقة.', 'success');
+                }
+            });
+        }
+        
+        const logoutButton = document.getElementById('logout-btn');
+        if (logoutButton) {
+            logoutButton.addEventListener('click', async () => {
+                try {
+                    console.log("Auth: User initiated logout.");
+                    isAuthDataLoaded = false; 
+                    await signOut(auth);
+                } catch (error) { 
+                    console.error("Logout error:", error); 
+                }
+            });
+        }
+
+        // Programmatic event listeners for opening modals
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log("DOM fully loaded and parsed. Setting up event listeners.");
+            populateFilters();
+
+            // Close modal buttons (for non-SweetAlert modals, if any are kept)
+            document.querySelectorAll('[data-close-modal]').forEach(button => {
+                button.addEventListener('click', (event) => {
+                    const modalId = event.target.closest('.modal-container')?.id || button.dataset.closeModal;
+                    if (modalId) {
+                        console.log(`Closing modal: ${modalId} via [data-close-modal] button.`);
+                        window.closeModal(modalId); 
+                    }
+                });
+            });
+
+            // Open modal buttons/links
+            const loginRegisterBtn = document.getElementById('login-register-btn');
+            if (loginRegisterBtn) {
+                loginRegisterBtn.addEventListener('click', () => {
+                    console.log("Login/Register button clicked. Opening SweetAlert login.");
+                    showLoginModal(); 
+                });
+            } else {
+                console.error("Button with ID 'login-register-btn' not found in DOM.");
+            }
+            
+            const addEstablishmentBtn = document.getElementById('open-add-establishment-modal-btn'); 
+            if (addEstablishmentBtn) {
+                addEstablishmentBtn.addEventListener('click', () => {
+                    console.log("Add Establishment button clicked. Opening SweetAlert for add establishment.");
+                    showAddEstablishmentModal(); // Use SweetAlert
+                });
+            } else {
+                 console.error("Button with ID 'open-add-establishment-modal-btn' not found in DOM.");
+            }
+
+            const managePaidAdsBtn = document.getElementById('open-manage-paid-ads-modal-btn'); 
+            if (managePaidAdsBtn) {
+                managePaidAdsBtn.addEventListener('click', () => {
+                    console.log("Manage Paid Ads button clicked. Attempting to open 'manage-paid-ads-modal'.");
+                    window.openModal('manage-paid-ads-modal'); // This is still an HTML modal
+                });
+            } else {
+                console.error("Button with ID 'open-manage-paid-ads-modal-btn' not found in DOM.");
+            }
+            
+            const aboutUsLink = document.getElementById('about-us-link');
+            if (aboutUsLink) {
+                aboutUsLink.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    console.log("About Us link clicked. Attempting to open 'about-us-modal'.");
+                    window.openModal('about-us-modal'); // This is still an HTML modal
+                });
+            } else {
+                console.error("Link with ID 'about-us-link' not found in DOM.");
+            }
+            
+            // Event delegation for dynamically added "عرض التفاصيل" buttons
+            const establishmentsContainerEl = document.getElementById('establishments-container');
+            if (establishmentsContainerEl) {
+                establishmentsContainerEl.addEventListener('click', (event) => {
+                    const targetButton = event.target.closest('button.show-details-btn'); 
+                    if (targetButton) {
+                        const establishmentId = targetButton.dataset.establishmentId;
+                        if (establishmentId) {
+                            console.log(`Show details button clicked for establishment ID: ${establishmentId}`);
+                            window.showEstablishmentDetails(establishmentId); 
+                        }
+                    }
+                });
+            }
+             const paidAdsBannerEl = document.getElementById('paid-ads-banner');
+            if (paidAdsBannerEl) {
+                paidAdsBannerEl.addEventListener('click', (event) => {
+                     const targetLi = event.target.closest('li[data-establishment-id]'); 
+                    if (targetLi) {
+                        const establishmentId = targetLi.dataset.establishmentId;
+                         if (establishmentId) {
+                            console.log(`Paid ad item clicked for establishment ID: ${establishmentId}`);
+                            window.showEstablishmentDetails(establishmentId); 
+                        }
+                    }
+                });
+            }
+            console.log("All DOMContentLoaded event listeners setup attempted.");
+        });
+
+    </script>
+    <style>
+        body {
+            font-family: 'Cairo', sans-serif;
+            background-color: #f7f8fc; 
+            color: #333;
+        }
+        /* HTML Modals - Keep styles for modals not converted to SweetAlert */
+        .modal-container { 
+             @apply fixed inset-0 z-[9990] bg-gray-900 bg-opacity-60 items-center justify-center p-4 backdrop-blur-sm;
+             /* Ensure this z-index is lower than SweetAlert's default if they overlap */
+        }
+        .modal-content { 
+            @apply bg-white p-6 sm:p-8 rounded-xl shadow-2xl w-full max-h-[90vh] overflow-y-auto;
+        }
+        .modal-content::-webkit-scrollbar { width: 6px; }
+        .modal-content::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 10px; }
+        .modal-content::-webkit-scrollbar-thumb { background: #cbd5e0; border-radius: 10px; }
+        .modal-content::-webkit-scrollbar-thumb:hover { background: #a0aec0; }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        #establishments-container > div { animation: fadeIn 0.5s ease-out forwards; }
+
+        #sidebar {
+            position: sticky;
+            top: 80px; 
+            height: calc(100vh - 100px); 
+            overflow-y: auto;
+            @apply md:w-1/4 bg-white p-6 rounded-xl shadow-lg h-fit mb-6 md:mb-0 transition-all duration-300;
+        }
+         #sidebar::-webkit-scrollbar { width: 5px; }
+        #sidebar::-webkit-scrollbar-track { background: #f9fafb; }
+        #sidebar::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 10px; }
+
+
+        .feedback-base { @apply text-sm mt-2 p-2.5 rounded-md border; }
+        .feedback-info { @apply feedback-base bg-blue-50 border-blue-300 text-blue-700; }
+        .feedback-success { @apply feedback-base bg-green-50 border-green-300 text-green-700; }
+        .feedback-error { @apply feedback-base bg-red-50 border-red-300 text-red-700; }
+        
+        /* Input field styling for SweetAlert if needed, or use Swal's own classes */
+        .swal2-input, .swal2-textarea, #swal-establishment-category, #swal-establishment-governorate {
+             @apply mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm;
+        }
+         /* Ensure radio buttons inside swal are styled */
+        .swal2-html-container input[type="radio"] {
+            @apply appearance-none border-2 border-gray-300 rounded-full w-4 h-4 mt-0.5 transition duration-200 ease-in-out align-middle;
+        }
+        .swal2-html-container input[type="radio"]:checked {
+            @apply border-indigo-600 bg-indigo-600;
+            background-image: url("data:image/svg+xml,%3csvg viewBox='0 0 16 16' fill='white' xmlns='http://www.w3.org/2000/svg'%3e%3ccircle cx='8' cy='8' r='3'/%3e%3c/svg%3e");
+        }
+         .swal2-html-container input[type="radio"]:focus {
+            @apply ring-2 ring-offset-1 ring-indigo-400;
+        }
+        .swal2-html-container .label-text { @apply block text-sm font-semibold text-gray-700 text-right; }
+
+
+        .btn-primary {
+            @apply bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 px-6 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transform active:scale-95;
+        }
+        .btn-secondary {
+             @apply bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-2.5 px-6 rounded-lg shadow-sm hover:shadow-md transition-all duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 transform active:scale-95;
+        }
+        .input-field { /* For non-Swal forms */
+            @apply mt-1 block w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent sm:text-sm transition-shadow duration-200;
+        }
+        .input-field:focus { @apply shadow-md; }
+        .label-text { /* General label styling */
+            @apply block text-sm font-semibold text-gray-700;
+        }
+
+    </style>
+</head>
+<body class="bg-slate-100">
+
+    <header class="bg-white text-gray-800 shadow-lg sticky top-0 z-30"> <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-wrap justify-between items-center">
+            <a href="#" class="text-3xl font-extrabold text-indigo-600 hover:text-indigo-700 transition-colors">
+                <i class="fas fa-map-signs mr-2"></i>دليلك
+            </a>
+            <div class="flex items-center space-x-3 space-x-reverse mt-3 sm:mt-0">
+                <span id="user-auth-status" class="text-sm text-gray-600 px-3 py-1.5 bg-gray-100 rounded-lg shadow-inner"></span>
+                <button id="login-register-btn" class="btn-primary text-sm"><i class="fas fa-sign-in-alt mr-2"></i>تسجيل/إنشاء حساب</button>
+                <div id="add-establishment-btn-container" class="hidden">
+                     <button id="open-add-establishment-modal-btn" class="bg-amber-500 hover:bg-amber-600 text-white font-semibold py-2.5 px-4 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 text-sm"><i class="fas fa-plus-circle mr-2"></i>أضف منشأتك</button>
+                </div>
+                <div id="manage-paid-ads-btn-container" class="hidden">
+                     <button id="open-manage-paid-ads-modal-btn" class="bg-teal-500 hover:bg-teal-600 text-white font-semibold py-2.5 px-4 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 text-sm"><i class="fas fa-ad mr-2"></i>إدارة الإعلانات</button>
+                </div>
+                <button id="logout-btn" class="hidden bg-red-500 hover:bg-red-600 text-white font-semibold py-2.5 px-4 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 text-sm"><i class="fas fa-sign-out-alt mr-2"></i>تسجيل الخروج</button>
+            </div>
+        </div>
+    </header>
+
+    <div id="paid-ads-banner" class="container mx-auto px-4 sm:px-6 lg:px-8 py-3 my-6 hidden">
+    </div>
+
+    <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col md:flex-row gap-x-8">
+        
+        <aside id="sidebar">
+            <h2 class="text-xl font-bold text-gray-800 mb-5 border-b-2 border-gray-200 pb-3">
+                <i class="fas fa-filter mr-2 text-indigo-500"></i>فلترة البحث
+            </h2>
+            
+            <div class="mb-6">
+                <label for="category-filter" class="label-text mb-1.5">التصنيف:</label>
+                <select id="category-filter" class="input-field">
+                </select>
+            </div>
+
+            <div class="mb-6">
+                <label for="governorate-filter" class="label-text mb-1.5">المحافظة:</label>
+                <select id="governorate-filter" class="input-field">
+                </select>
+            </div>
+            
+            <hr class="my-8 border-gray-200">
+
+            <h2 class="text-xl font-bold text-gray-800 mb-4 border-b-2 border-gray-200 pb-3">
+                <i class="fas fa-link mr-2 text-indigo-500"></i>روابط مفيدة
+            </h2>
+            <nav class="space-y-2">
+                <a href="mailto:complaints@dalilak.com?subject=شكوى/اقتراح بخصوص تطبيق دليلك" class="flex items-center text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg p-2.5 transition-all duration-200 font-medium">
+                    <i class="fas fa-envelope-open-text mr-3 w-5 text-center"></i>شكاوى واقتراحات
+                </a>
+                <a href="#" id="about-us-link" class="flex items-center text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg p-2.5 transition-all duration-200 font-medium">
+                    <i class="fas fa-info-circle mr-3 w-5 text-center"></i>من نحن
+                </a>
+            </nav>
+        </aside>
+
+        <main id="main-content-area" class="md:w-3/4">
+            <div id="loading-indicator" class="hidden justify-center items-center py-12 flex-col">
+                <svg class="animate-spin h-12 w-12 text-indigo-500 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <p class="mt-4 text-lg font-semibold text-gray-600">جاري تحميل المنشآت...</p>
+            </div>
+            <div id="no-results-message" class="text-center py-12 text-gray-500 hidden">
+                <i class="fas fa-search-minus fa-3x text-gray-400 mb-4"></i>
+                <h3 class="mt-2 text-xl font-semibold text-gray-800">لا توجد نتائج</h3>
+                <p class="mt-1 text-base text-gray-500">لم يتم العثور على منشآت تطابق بحثك. حاول تغيير الفلاتر.</p>
+            </div>
+            <div id="establishments-container" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
+            </div>
+        </main>
+    </div>
+
+    <div id="about-us-modal" class="modal-container hidden"> <div class="modal-content max-w-lg">
+            <h2 class="text-2xl font-bold mb-5 text-center text-gray-800">من نحن</h2>
+            <div class="prose prose-sm sm:prose-base text-gray-700 text-justify space-y-4 leading-relaxed">
+                <p>
+                    تطبيق "دليلك" هو مبادرتك الأولى لاستكشاف كنوز سوريا السياحية والخدمية. 
+                    نحن هنا لنبني جسراً يربط بين أصحاب المنشآت المبدعين والزوار الباحثين عن تجارب لا تُنسى.
+                </p>
+                <p>
+                    هدفنا هو توفير منصة سهلة، غنية بالمعلومات الدقيقة والمحدثة، لتساعدك في التخطيط لرحلتك القادمة أو لاكتشاف جوهرة مخفية بالقرب منك. انضم إلينا في رحلة إثراء السياحة السورية!
+                </p>
+            </div>
+            <div class="mt-8 text-center">
+                <button type="button" data-close-modal class="btn-primary">فهمت!</button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="manage-paid-ads-modal" class="modal-container hidden"> <div class="modal-content max-w-md">
+            <h2 class="text-2xl font-bold mb-6 text-center text-gray-800">إدارة الإعلانات المدفوعة</h2>
+            <form id="manage-paid-ads-form" class="space-y-5">
+                <div>
+                    <label for="paid-ad-establishment-id" class="label-text">معرّف المنشأة (ID):</label>
+                    <input type="text" id="paid-ad-establishment-id" required placeholder="أدخل ID المنشأة لتفعيل/إلغاء الإعلان" class="input-field">
+                    <p class="text-xs text-gray-500 mt-1">يمكنك الحصول على ID المنشأة من لوحة تحكم Firebase.</p>
+                </div>
+                <div id="manage-paid-ads-feedback"></div>
+                <div class="flex flex-col-reverse sm:flex-row items-center justify-end gap-3 pt-4 border-t mt-6">
+                    <button type="button" data-close-modal class="btn-secondary w-full sm:w-auto">إلغاء</button>
+                    <button type="submit" class="btn-primary bg-teal-500 hover:bg-teal-600 focus:ring-teal-500 w-full sm:w-auto">تبديل حالة الإعلان</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <footer class="bg-gray-800 text-white text-center p-8 mt-16">
+        <p class="text-lg font-semibold">&copy; ${new Date().getFullYear()} دليلك. جميع الحقوق محفوظة.</p>
+        <p class="text-sm mt-1 opacity-75">بوابتك إلى روائع سوريا</p>
+    </footer>
+
+</body>
+</html>
