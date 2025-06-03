@@ -329,7 +329,10 @@
             },
             "error_query_setup": { ar: "خطأ فادح في إعداد الاستعلام:", en: "Fatal error setting up query:", es: "Error fatal al configurar la consulta:", de: "Schwerwiegender Fehler beim Einrichten der Abfrage:", tr: "Sorgu ayarlanırken önemli hata:" },
             "image_load_error_placeholder_text": { ar: "خطأ في تحميل الصورة", en: "Image Load Error", es: "Error al Cargar Imagen", de: "Bildladefehler", tr: "Resim Yükleme Hatası" },
-            "error_loading_map": { ar: "خطأ في تحميل الخريطة.", en: "Error loading map.", es: "Error al cargar el mapa.", de: "Fehler beim Laden der Karte.", tr: "Harita yüklenirken hata oluştu." }
+            "error_loading_map": { ar: "خطأ في تحميل الخريطة.", en: "Error loading map.", es: "Error al cargar el mapa.", de: "Fehler beim Laden der Karte.", tr: "Harita yüklenirken hata oluştu." },
+            "complaints_modal_intro_text": { ar: "يمكنك إرسال شكواك أو اقتراحك مباشرة إلى البريد الإلكتروني التالي:", en: "You can send your complaint or suggestion directly to the following email address:", es: "Puede enviar su queja o sugerencia directamente a la siguiente dirección de correo electrónico:", de: "Sie können Ihre Beschwerde oder Ihren Vorschlag direkt an die folgende E-Mail-Adresse senden:", tr: "Şikayet veya önerinizi doğrudan aşağıdaki e-posta adresine gönderebilirsiniz:" },
+            "copy_email_btn": { ar: "نسخ البريد الإلكتروني", en: "Copy Email", es: "Copiar Correo Electrónico", de: "E-Mail Kopieren", tr: "E-postayı Kopyala" },
+            "email_copied_feedback": { ar: "تم نسخ البريد الإلكتروني!", en: "Email copied!", es: "¡Correo electrónico copiado!", de: "E-Mail kopiert!", tr: "E-posta kopyalandı!" }
         };
 
         function getCurrentLanguage() {
@@ -1814,7 +1817,6 @@
             }
             
             applyTranslationsToUI(); // Apply initial translations (this also calls populateFilters)
-            // populateFilters(); // Already called by applyTranslationsToUI
 
             // Add event listeners for filters AFTER they are populated
             if (categoryFilter) categoryFilter.addEventListener('change', () => loadEstablishments());
@@ -1824,7 +1826,6 @@
             // Generic close modal buttons (for non-SweetAlert modals)
             document.querySelectorAll('[data-close-modal]').forEach(button => {
                 button.addEventListener('click', (event) => {
-                    // Try to find the closest modal container by ID or use the button's data attribute
                     const modalId = event.target.closest('.modal-container')?.id || button.dataset.closeModal;
                     if (modalId) {
                         console.log(`Closing modal: ${modalId} via [data-close-modal] button.`);
@@ -1849,8 +1850,8 @@
             if (addEstablishmentBtn) {
                 addEstablishmentBtn.addEventListener('click', () => {
                     console.log("Add Establishment button clicked. Opening SweetAlert for add establishment.");
-                    window.tempEstablishmentData = { name:{}, description:{}, location:{}, priceRange:{} }; // Initialize multilingual fields as objects
-                    window.selectedCoordsForNewEstablishment = null; // Reset selected coords
+                    window.tempEstablishmentData = { name:{}, description:{}, location:{}, priceRange:{} }; 
+                    window.selectedCoordsForNewEstablishment = null; 
                     showAddEstablishmentModal();
                 });
             } else {
@@ -1862,23 +1863,90 @@
             if (managePaidAdsBtn) {
                 managePaidAdsBtn.addEventListener('click', () => {
                     console.log("Manage Paid Ads button clicked. Attempting to open 'manage-paid-ads-modal'.");
-                    window.openModal('manage-paid-ads-modal'); // Ensure this modal ID exists
+                    window.openModal('manage-paid-ads-modal'); 
                 });
             } else {
                 console.error("Button with ID 'open-manage-paid-ads-modal-btn' not found in DOM.");
             }
 
-            // About Us link (uses HTML modal)
+            // "About Us" link - now uses SweetAlert
             const aboutUsLink = document.getElementById('about-us-link');
             if (aboutUsLink) {
                 aboutUsLink.addEventListener('click', (e) => {
-                    e.preventDefault(); // Prevent default link behavior
-                    console.log("About Us link clicked. Attempting to open 'about-us-modal'.");
-                    window.openModal('about-us-modal'); // Ensure this modal ID exists
+                    e.preventDefault(); 
+                    const lang = getCurrentLanguage();
+                    Swal.fire({
+                        title: getTranslation("about_us_modal_title", lang),
+                        html: `
+                            <div class="prose prose-sm sm:prose-base text-gray-700 text-${lang === 'ar' ? 'right' : 'left'} space-y-4 leading-relaxed p-4">
+                                <p>${getTranslation("about_us_modal_content1", lang)}</p>
+                                <p>${getTranslation("about_us_modal_content2", lang)}</p>
+                            </div>`,
+                        confirmButtonText: getTranslation("got_it_btn", lang),
+                        customClass: {
+                            popup: 'rounded-xl',
+                            confirmButton: 'btn-primary'
+                        }
+                    });
                 });
             } else {
                 console.error("Link with ID 'about-us-link' not found in DOM.");
             }
+
+            // "Complaints & Suggestions" link - now uses SweetAlert
+            const complaintsLink = document.getElementById('complaints-suggestions-link-sidebar');
+            if (complaintsLink) {
+                complaintsLink.href = "#"; // Prevent default mailto action
+                complaintsLink.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const lang = getCurrentLanguage();
+                    const complaintsEmail = "hackmack040@gmail.com";
+                    Swal.fire({
+                        title: getTranslation("complaints_suggestions_link", lang),
+                        html: `
+                            <div class="text-${lang === 'ar' ? 'right' : 'left'} p-4">
+                                <p class="mb-3">${getTranslation("complaints_modal_intro_text", lang)}</p>
+                                <p class="mb-4">
+                                    <a href="mailto:${complaintsEmail}?subject=${encodeURIComponent(getTranslation('complaints_suggestions_link', lang))}" class="text-indigo-600 hover:underline font-semibold text-lg">${complaintsEmail}</a>
+                                </p>
+                                <button id="copy-complaints-email-btn" class="btn-secondary text-sm py-2 px-4">
+                                    <i class="fas fa-copy ${lang === 'ar' ? 'ml-2' : 'mr-2'}"></i>${getTranslation("copy_email_btn", lang)}
+                                </button>
+                                <p id="copy-feedback-swal" class="text-xs mt-2 text-green-600"></p>
+                            </div>`,
+                        showConfirmButton: true,
+                        confirmButtonText: getTranslation("got_it_btn", lang),
+                        customClass: {
+                            popup: 'rounded-xl',
+                            confirmButton: 'btn-primary'
+                        },
+                        didOpen: () => {
+                            const copyBtn = document.getElementById('copy-complaints-email-btn');
+                            const feedbackP = document.getElementById('copy-feedback-swal');
+                            if (copyBtn && feedbackP) {
+                                copyBtn.addEventListener('click', () => {
+                                    const tempInput = document.createElement("input");
+                                    tempInput.value = complaintsEmail;
+                                    document.body.appendChild(tempInput);
+                                    tempInput.select();
+                                    try {
+                                        document.execCommand('copy');
+                                        feedbackP.textContent = getTranslation("email_copied_feedback", lang);
+                                        setTimeout(() => feedbackP.textContent = '', 2000);
+                                    } catch (err) {
+                                        console.error('Failed to copy email: ', err);
+                                        feedbackP.textContent = 'Failed to copy.'; // Fallback message
+                                    }
+                                    document.body.removeChild(tempInput);
+                                });
+                            }
+                        }
+                    });
+                });
+            } else {
+                 console.error("Link with ID 'complaints-suggestions-link-sidebar' not found in DOM.");
+            }
+
 
             // Event delegation for "View Details" buttons on establishment cards
             const establishmentsContainerEl = document.getElementById('establishments-container');
@@ -2119,7 +2187,7 @@
                 <i class="fas fa-link text-indigo-500"></i> <span data-translate-key="useful_links_title" class="mr-2 ml-2">روابط مفيدة</span>
             </h2>
             <nav class="space-y-2">
-                <a href="mailto:complaints@dalilak.com?subject=شكوى/اقتراح بخصوص تطبيق دليلك" class="flex items-center text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg p-2.5 transition-all duration-200 font-medium">
+                <a href="#" id="complaints-suggestions-link-sidebar" class="flex items-center text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg p-2.5 transition-all duration-200 font-medium">
                     <i class="fas fa-envelope-open-text w-5 text-center"></i><span data-translate-key="complaints_suggestions_link" class="mr-3 ml-3">شكاوى واقتراحات</span>
                 </a>
                 <a href="#" id="about-us-link" class="flex items-center text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg p-2.5 transition-all duration-200 font-medium">
@@ -2157,20 +2225,7 @@
         </main>
     </div>
 
-    <div id="about-us-modal" class="modal-container hidden"> <div class="modal-content max-w-lg"> <h2 class="text-2xl font-bold mb-5 text-center text-gray-800" data-translate-key="about_us_modal_title">من نحن</h2>
-            <div class="prose prose-sm sm:prose-base text-gray-700 text-justify space-y-4 leading-relaxed"> <p data-translate-key="about_us_modal_content1">
-                    تطبيق "دليلك" هو مبادرتك الأولى لاستكشاف كنوز سوريا السياحية والخدمية.
-                    نحن هنا لنبني جسراً يربط بين أصحاب المنشآت المبدعين والزوار الباحثين عن تجارب لا تُنسى.
-                </p>
-                <p data-translate-key="about_us_modal_content2">
-                    هدفنا هو توفير منصة سهلة، غنية بالمعلومات الدقيقة والمحدثة، لتساعدك في التخطيط لرحلتك القادمة أو لاكتشاف جوهرة مخفية بالقرب منك. انضم إلينا في رحلة إثراء السياحة السورية!
-                </p>
-            </div>
-            <div class="mt-8 text-center"> <button type="button" data-close-modal="about-us-modal" class="btn-primary" data-translate-key="got_it_btn">فهمت!</button>
-            </div>
-        </div>
-    </div>
-
+    <!-- Manage Paid Ads Modal (HTML Modal - REMAINS UNCHANGED) -->
     <div id="manage-paid-ads-modal" class="modal-container hidden">
         <div class="modal-content max-w-md">
             <h2 class="text-2xl font-bold mb-6 text-center text-gray-800" data-translate-key="manage_paid_ads_modal_title">إدارة الإعلانات المدفوعة</h2>
