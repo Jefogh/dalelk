@@ -134,6 +134,9 @@
             "filter_search_title": { ar: "فلترة البحث", en: "Filter Search", es: "Filtrar Búsqueda", de: "Suche Filtern", tr: "Aramayı Filtrele" },
             "category_filter_label": { ar: "التصنيف:", en: "Category:", es: "Categoría:", de: "Kategorie:", tr: "Kategori:" },
             "governorate_filter_label": { ar: "المحافظة:", en: "Governorate:", es: "Provincia:", de: "Gouvernement:", tr: "İl:" },
+            "search_by_name_label": { ar: "البحث بالاسم:", en: "Search by Name:", es: "Buscar por Nombre:", de: "Suche nach Name:", tr: "Ada Göre Ara:" },
+            "search_by_name_placeholder": { ar: "أدخل اسم المنشأة...", en: "Enter establishment name...", es: "Ingrese el nombre del establecimiento...", de: "Betriebsname eingeben...", tr: "Tesis adını girin..." },
+            "apply_filters_btn": { ar: "تطبيق الفلاتر", en: "Apply Filters", es: "Aplicar Filtros", de: "Filter Anwenden", tr: "Filtreleri Uygula" },
             "useful_links_title": { ar: "روابط مفيدة", en: "Useful Links", es: "Enlaces Útiles", de: "Nützliche Links", tr: "Faydalı Bağlantılar" },
             "complaints_suggestions_link": { ar: "شكاوى واقتراحات", en: "Complaints & Suggestions", es: "Quejas y Sugerencias", de: "Beschwerden & Vorschläge", tr: "Şikayet & Öneriler" },
             "about_us_link": { ar: "من نحن", en: "About Us", es: "Sobre Nosotros", de: "Über Uns", tr: "Hakkımızda" },
@@ -330,9 +333,10 @@
             "error_query_setup": { ar: "خطأ فادح في إعداد الاستعلام:", en: "Fatal error setting up query:", es: "Error fatal al configurar la consulta:", de: "Schwerwiegender Fehler beim Einrichten der Abfrage:", tr: "Sorgu ayarlanırken önemli hata:" },
             "image_load_error_placeholder_text": { ar: "خطأ في تحميل الصورة", en: "Image Load Error", es: "Error al Cargar Imagen", de: "Bildladefehler", tr: "Resim Yükleme Hatası" },
             "error_loading_map": { ar: "خطأ في تحميل الخريطة.", en: "Error loading map.", es: "Error al cargar el mapa.", de: "Fehler beim Laden der Karte.", tr: "Harita yüklenirken hata oluştu." },
-            "complaints_modal_intro_text": { ar: "يمكنك إرسال شكواك أو اقتراحك مباشرة إلى البريد الإلكتروني التالي:", en: "You can send your complaint or suggestion directly to the following email address:", es: "Puede enviar su queja o sugerencia directamente a la siguiente dirección de correo electrónico:", de: "Sie können Ihre Beschwerde oder Ihren Vorschlag direkt an die folgende E-Mail-Adresse senden:", tr: "Şikayet veya önerinizi doğrudan aşağıdaki e-posta adresine gönderebilirsiniz:" },
+            "complaints_suggestions_modal_title": { ar: "شكاوى واقتراحات", en: "Complaints & Suggestions", es: "Quejas y Sugerencias", de: "Beschwerden & Vorschläge", tr: "Şikayet & Öneriler" },
+            "complaints_email_text": { ar: "لتقديم شكوى أو اقتراح، يرجى مراسلتنا على البريد الإلكتروني التالي:", en: "To submit a complaint or suggestion, please email us at:", es: "Para enviar una queja o sugerencia, envíenos un correo electrónico a:", de: "Um eine Beschwerde oder einen Vorschlag einzureichen, senden Sie uns bitte eine E-Mail an:", tr: "Bir şikayet veya öneri göndermek için lütfen bize şu adresten e-posta gönderin:" },
             "copy_email_btn": { ar: "نسخ البريد الإلكتروني", en: "Copy Email", es: "Copiar Correo Electrónico", de: "E-Mail Kopieren", tr: "E-postayı Kopyala" },
-            "email_copied_feedback": { ar: "تم نسخ البريد الإلكتروني!", en: "Email copied!", es: "¡Correo electrónico copiado!", de: "E-Mail kopiert!", tr: "E-posta kopyalandı!" }
+            "email_copied_alert": { ar: "تم نسخ البريد الإلكتروني!", en: "Email copied!", es: "¡Correo electrónico copiado!", de: "E-Mail kopiert!", tr: "E-posta kopyalandı!" }
         };
 
         function getCurrentLanguage() {
@@ -670,6 +674,8 @@
         const paidAdsBanner = document.getElementById('paid-ads-banner');
         const categoryFilter = document.getElementById('category-filter');
         const governorateFilter = document.getElementById('governorate-filter');
+        const nameSearchInput = document.getElementById('name-search-input'); // Added for name search
+        const applyFiltersBtn = document.getElementById('apply-filters-btn'); // Added for applying all filters
         const loadingIndicator = document.getElementById('loading-indicator');
         const noResultsMessage = document.getElementById('no-results-message');
 
@@ -700,15 +706,13 @@
                 option.textContent = getTranslation(govKey, lang); // Display translated text
                 governorateFilter.appendChild(option);
             });
-
-            // Event listeners are added once in DOMContentLoaded
         }
 
         // Load establishments from Firestore
         async function loadEstablishments(filterByOwnerId = null) {
              if (!initialAuthCheckCompleted) {
                  console.warn("LoadEstablishments: Initial auth check not yet completed. Deferring load.");
-                 return; // Don't load if auth isn't ready
+                 return;
             }
             if (!db || !establishmentsContainer) {
                  console.error("LoadEstablishments: DB not initialized or container not found.");
@@ -717,73 +721,65 @@
             const lang = getCurrentLanguage();
             console.log("LoadEstablishments: Called.", filterByOwnerId ? `Filtering for owner: ${filterByOwnerId}` : "Loading all approved.");
             showLoading(true);
-            establishmentsContainer.innerHTML = ''; // Clear previous results
-            noResultsMessage.classList.add('hidden'); // Hide no results message initially
-            // Update title based on context
+            establishmentsContainer.innerHTML = ''; 
+            noResultsMessage.classList.add('hidden'); 
             document.getElementById('main-content-area-title').textContent = filterByOwnerId ? getTranslation("my_establishments_page_title", lang) : getTranslation("latest_establishments_title", lang);
 
 
-            // Get selected filter values (canonical keys)
             const selectedCategoryCanonicalKey = categoryFilter.value;
             const selectedGovernorateCanonicalKey = governorateFilter.value;
+            const searchNameTerm = nameSearchInput.value.trim().toLowerCase(); // Get search term for name
 
             try {
-                // Path to public establishments data
                 const publicEstablishmentsPath = `artifacts/${appId}/public/data/establishments`;
                 let queryConstraints = [];
 
                 if (filterByOwnerId) {
                     queryConstraints.push(where("ownerId", "==", filterByOwnerId));
                 } else {
-                    queryConstraints.push(where("status", "==", "approved")); // Only show approved
+                    queryConstraints.push(where("status", "==", "approved")); 
 
-                    // *** MODIFICATION FOR CATEGORY FILTERING ***
                     if (selectedCategoryCanonicalKey) {
-                        const canonicalKey = selectedCategoryCanonicalKey;
-                        let valuesToQuery = new Set([canonicalKey]); // Start with the canonical key itself
-                        if (translations[canonicalKey]) {
-                            Object.values(translations[canonicalKey]).forEach(trans => valuesToQuery.add(trans));
-                        }
-                        // Firestore 'in' queries are limited to 30 values. Our translations are few.
-                        queryConstraints.push(where("categoryKey", "in", Array.from(valuesToQuery)));
-                        console.log("Filtering by categoryKey IN:", Array.from(valuesToQuery));
+                        queryConstraints.push(where("categoryKey", "==", selectedCategoryCanonicalKey));
+                        console.log("Filtering by categoryKey EQUALS:", selectedCategoryCanonicalKey);
                     }
 
-                    // *** MODIFICATION FOR GOVERNORATE FILTERING ***
                     if (selectedGovernorateCanonicalKey) {
-                        const canonicalKey = selectedGovernorateCanonicalKey;
-                        let valuesToQuery = new Set([canonicalKey]);
-                        if (translations[canonicalKey]) {
-                            Object.values(translations[canonicalKey]).forEach(trans => valuesToQuery.add(trans));
-                        }
-                        queryConstraints.push(where("governorateKey", "in", Array.from(valuesToQuery)));
-                        console.log("Filtering by governorateKey IN:", Array.from(valuesToQuery));
+                        queryConstraints.push(where("governorateKey", "==", selectedGovernorateCanonicalKey));
+                        console.log("Filtering by governorateKey EQUALS:", selectedGovernorateCanonicalKey);
                     }
+                    // Name search will be done client-side after fetching due to Firestore limitations with multiple range/inequality filters or combining text search with other filters effectively.
+                    // If you have a dedicated search service like Algolia, this would be done server-side.
                 }
 
-                queryConstraints.push(orderBy("publishedAt", "desc")); // Order by newest first
-                queryConstraints.push(limit(filterByOwnerId ? 100 : 50)); // Limit results
+                queryConstraints.push(orderBy("publishedAt", "desc")); 
+                queryConstraints.push(limit(filterByOwnerId ? 100 : 150)); // Increased limit slightly to allow for client-side name filtering
 
                 const q = query(collection(db, publicEstablishmentsPath), ...queryConstraints);
 
-                // Unsubscribe from previous listener if it exists
                 if (establishmentsListener) establishmentsListener();
 
                 establishmentsListener = onSnapshot(q, (querySnapshot) => {
                     showLoading(false);
                     let establishmentDocs = [];
-                    // Clear previous establishment markers from the main map
                     establishmentMarkers.forEach(marker => mainMap?.removeLayer(marker));
                     establishmentMarkers = [];
 
                     querySnapshot.forEach((doc) => {
                         const establishmentData = doc.data();
+                        // Client-side filtering for name if a search term is provided
+                        if (searchNameTerm && !filterByOwnerId) { // Apply name filter only for general search
+                            const nameAr = (establishmentData.name?.ar || "").toLowerCase();
+                            const nameEn = (establishmentData.name?.en || "").toLowerCase();
+                            if (!nameAr.includes(searchNameTerm) && !nameEn.includes(searchNameTerm)) {
+                                return; // Skip if name doesn't match
+                            }
+                        }
                         establishmentDocs.push({ id: doc.id, data: establishmentData });
 
-                        // Add marker to main map for each establishment
                         if (establishmentData.coordinates && typeof establishmentData.coordinates.latitude === 'number' && typeof establishmentData.coordinates.longitude === 'number' && mainMap) {
                             const estMarker = L.marker([establishmentData.coordinates.latitude, establishmentData.coordinates.longitude], {
-                                 icon: L.icon({ // Default red marker for establishments
+                                 icon: L.icon({ 
                                     iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
                                     iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34],
                                     shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', shadowSize: [41, 41]
@@ -795,7 +791,7 @@
                         }
                     });
 
-                    establishmentsContainer.innerHTML = ''; // Clear before rendering new
+                    establishmentsContainer.innerHTML = ''; 
                     if (establishmentDocs.length === 0) {
                         noResultsMessage.classList.remove('hidden');
                         return;
@@ -810,14 +806,13 @@
                         const indexCreationLink = indexCreationLinkMatch ? indexCreationLinkMatch[0] : null;
                         const indexLinkHtml = indexCreationLink ? `يمكنك محاولة استخدام <a href="${indexCreationLink}" target="_blank" class="font-bold text-blue-600 hover:underline">هذا الرابط</a> لإنشائه.` : 'عادةً ما توفر رسالة الخطأ في وحدة تحكم المتصفح رابطًا مباشرًا لإنشاء هذا الفهرس.';
                         
-                        let keyField = "categoryKey or governorateKey"; // Default message for IN query
+                        let keyField = "categoryKey or governorateKey"; 
                         if (selectedCategoryCanonicalKey && selectedGovernorateCanonicalKey) keyField = "categoryKey' and 'governorateKey";
                         else if (selectedCategoryCanonicalKey) keyField = "categoryKey";
                         else if (selectedGovernorateCanonicalKey) keyField = "governorateKey";
 
-
                         errorMessageText = getDynamicTranslation("error_firestore_index_required", { INDEX_LINK_HTML: indexLinkHtml, KEY_FIELD: keyField }, lang);
-                        establishmentsContainer.innerHTML = errorMessageText; // Display formatted error
+                        establishmentsContainer.innerHTML = errorMessageText; 
                     } else {
                          establishmentsContainer.innerHTML = `<p class="text-red-600 p-4 bg-red-50 rounded-md">${errorMessageText}</p>`;
                     }
@@ -834,21 +829,17 @@
         function renderEstablishmentCard(id, data) {
             const lang = getCurrentLanguage();
             const card = document.createElement('div');
-            card.className = 'bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-2xl transition-all duration-300 ease-in-out flex flex-col group'; // Added flex for button at bottom
+            card.className = 'bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-2xl transition-all duration-300 ease-in-out flex flex-col group'; 
 
-            // Use getTranslatedFieldValue for multilingual fields like name and description
             const name = getTranslatedFieldValue(data.name, lang) || getTranslation("establishment_name_not_available", lang);
             const descriptionText = getTranslatedFieldValue(data.description, lang);
-            // Sanitize and truncate description
             const description = descriptionText.substring(0, 120).replace(/</g, "&lt;").replace(/>/g, "&gt;") + (descriptionText.length > 120 ? '...' : '') || getTranslation("no_description", lang) ;
 
-            // Handle image URL, provide a fallback
             const imageUrl = data.photos && data.photos.length > 0 && typeof data.photos[0] === 'string' && data.photos[0].startsWith('data:image')
                              ? data.photos[0]
-                             : `https://placehold.co/600x400/E2E8F0/4A5568?text=${encodeURIComponent(name)}&font=cairo`; // Placeholder with name
+                             : `https://placehold.co/600x400/E2E8F0/4A5568?text=${encodeURIComponent(name)}&font=cairo`; 
             const averageRating = data.averageRating ? parseFloat(data.averageRating).toFixed(1) : '0.0';
             const ratingCount = data.ratingCount || 0;
-            // Display translated category and governorate from their canonical keys
             const categoryDisplay = data.categoryKey ? getTranslation(data.categoryKey, lang) : getTranslation("category_placeholder_card", lang);
             const governorateDisplay = data.governorateKey ? getTranslation(data.governorateKey, lang) : getTranslation("governorate_not_specified", lang);
 
@@ -890,22 +881,22 @@
                     const data = docSnap.data();
                     const name = getTranslatedFieldValue(data.name, lang) || getTranslation("establishment_name_not_available", lang);
                     const description = getTranslatedFieldValue(data.description, lang) || getTranslation("no_description", lang);
-                    const locationText = getTranslatedFieldValue(data.location, lang) || getTranslation("governorate_not_specified", lang); // Assuming 'location' field stores multilingual descriptive text
-                    const priceRangeText = getTranslatedFieldValue(data.priceRange, lang) || ''; // Assuming 'priceRange' field stores multilingual price info
+                    const locationText = getTranslatedFieldValue(data.location, lang) || getTranslation("governorate_not_specified", lang); 
+                    const priceRangeText = getTranslatedFieldValue(data.priceRange, lang) || ''; 
 
                     const averageRating = data.averageRating ? parseFloat(data.averageRating).toFixed(1) : '0.0';
                     const ratingCount = data.ratingCount || 0;
                     const isOwner = auth.currentUser && auth.currentUser.uid === data.ownerId;
 
-                    let photosHtml = `<div class="grid grid-cols-1 sm:grid-cols-${Math.min(data.photos?.length || 1, 2)} gap-2 my-3">`; // Show 1 or 2 photos
+                    let photosHtml = `<div class="grid grid-cols-1 sm:grid-cols-${Math.min(data.photos?.length || 1, 2)} gap-2 my-3">`; 
                     if (data.photos && data.photos.length > 0) {
-                        data.photos.slice(0,2).forEach(photoDataUrl => { // Take first 2 photos
-                            if (typeof photoDataUrl === 'string' && photoDataUrl.startsWith('data:image')) { // Ensure it's a base64 string
+                        data.photos.slice(0,2).forEach(photoDataUrl => { 
+                            if (typeof photoDataUrl === 'string' && photoDataUrl.startsWith('data:image')) { 
                                 photosHtml += `<img src="${photoDataUrl}" alt="${name}" class="w-full h-40 object-cover rounded-md shadow-sm" onerror="this.style.display='none';">`;
                             }
                         });
                     } else {
-                         photosHtml += `<img src="https://placehold.co/300x200/E2E8F0/4A5568?text=${encodeURIComponent(name)}&font=cairo" alt="${name}" class="w-full h-40 object-cover rounded-md shadow-sm col-span-full" onerror="this.style.display='none';">`; // Placeholder if no photos
+                         photosHtml += `<img src="https://placehold.co/300x200/E2E8F0/4A5568?text=${encodeURIComponent(name)}&font=cairo" alt="${name}" class="w-full h-40 object-cover rounded-md shadow-sm col-span-full" onerror="this.style.display='none';">`; 
                     }
                     photosHtml += '</div>';
 
@@ -952,22 +943,19 @@
                         title: `<strong class="text-2xl text-indigo-600">${name}</strong>`,
                         html: swalHtml,
                         showCloseButton: true,
-                        showConfirmButton: false, // No default confirm button, handled by custom buttons
-                        width: '90%', // Responsive width
-                        maxWidth: '600px', // Max width for larger screens
+                        showConfirmButton: false, 
+                        width: '90%', 
+                        maxWidth: '600px', 
                         didOpen: () => {
-                            // Attach event listener for submit rating button
                             const submitBtn = document.getElementById(`swal-submit-rating-btn-${establishmentId}`);
                             if(submitBtn) {
-                                submitBtn.addEventListener('click', () => submitRating(establishmentId, true)); // true for isSwal
+                                submitBtn.addEventListener('click', () => submitRating(establishmentId, true)); 
                             }
-                            // Attach event listener for request paid ad button
                             const requestAdBtn = document.getElementById(`swal-request-paid-ad-btn-${establishmentId}`);
                             if(requestAdBtn){
                                 requestAdBtn.addEventListener('click', () => requestPaidAd(establishmentId));
                             }
-                            // Load ratings when modal opens
-                            loadRatingsForEstablishment(establishmentId, true); // true for isSwal
+                            loadRatingsForEstablishment(establishmentId, true); 
                         }
                     });
 
@@ -983,33 +971,31 @@
         // Load ratings for a specific establishment
         async function loadRatingsForEstablishment(establishmentId, isSwal = false) {
             const lang = getCurrentLanguage();
-            const listIdSuffix = isSwal ? `swal-ratings-list-${establishmentId}` : `ratings-list-${establishmentId}`; // Adjust ID based on context
+            const listIdSuffix = isSwal ? `swal-ratings-list-${establishmentId}` : `ratings-list-${establishmentId}`; 
             const ratingsListDiv = document.getElementById(listIdSuffix);
 
-            if (!ratingsListDiv || !db) return; // Ensure div and db exist
+            if (!ratingsListDiv || !db) return; 
             ratingsListDiv.innerHTML = `<p class="text-gray-500 italic text-xs">${getTranslation("loading_ratings_text", lang)}</p>`;
 
             try {
-                // Path to public ratings data
                 const ratingsPath = `artifacts/${appId}/public/data/ratings`;
-                const q = query(collection(db, ratingsPath), where("establishmentId", "==", establishmentId), orderBy("createdAt", "desc"), limit(5)); // Get latest 5 ratings
+                const q = query(collection(db, ratingsPath), where("establishmentId", "==", establishmentId), orderBy("createdAt", "desc"), limit(5)); 
 
-                // Use onSnapshot for real-time updates if needed, or getDocs for one-time fetch
                 onSnapshot(q, (querySnapshot) => {
                     if (querySnapshot.empty) {
                         ratingsListDiv.innerHTML = `<p class="text-gray-500 italic text-xs p-1 ${isSwal ? '' : 'bg-gray-50 rounded-md'}">${getTranslation("no_ratings_yet_text", lang)}</p>`;
                         return;
                     }
-                    ratingsListDiv.innerHTML = `<h4 class="text-sm font-semibold mb-1 text-gray-600 ${isSwal ? '' : 'text-xl'}">${getTranslation("ratings_list_title", lang)}</h4><div class="space-y-2">`; // Clear and add title
+                    ratingsListDiv.innerHTML = `<h4 class="text-sm font-semibold mb-1 text-gray-600 ${isSwal ? '' : 'text-xl'}">${getTranslation("ratings_list_title", lang)}</h4><div class="space-y-2">`; 
                     querySnapshot.forEach((doc) => {
                         const rating = doc.data();
                         const ratingDiv = document.createElement('div');
-                        ratingDiv.className = `p-1.5 ${isSwal ? '' : 'bg-white rounded-lg shadow-sm border border-gray-200'} text-xs`; // Styling for each rating
+                        ratingDiv.className = `p-1.5 ${isSwal ? '' : 'bg-white rounded-lg shadow-sm border border-gray-200'} text-xs`; 
                         const stars = '⭐'.repeat(rating.satisfactionLevel || 0);
-                        const comment = rating.comment ? String(rating.comment).replace(/</g, "&lt;").replace(/>/g, "&gt;") : `<em>${getTranslation("no_comment_text", lang)}</em>`; // Sanitize comment
-                        const visitorName = rating.visitorName ? String(rating.visitorName).replace(/</g, "&lt;").replace(/>/g, "&gt;") : getTranslation("visitor_text", lang); // Sanitize name
+                        const comment = rating.comment ? String(rating.comment).replace(/</g, "&lt;").replace(/>/g, "&gt;") : `<em>${getTranslation("no_comment_text", lang)}</em>`; 
+                        const visitorName = rating.visitorName ? String(rating.visitorName).replace(/</g, "&lt;").replace(/>/g, "&gt;") : getTranslation("visitor_text", lang); 
                         let date = '';
-                        if (rating.createdAt && typeof rating.createdAt.seconds === 'number') { // Check if createdAt is a Firestore Timestamp
+                        if (rating.createdAt && typeof rating.createdAt.seconds === 'number') { 
                              date = new Date(rating.createdAt.seconds * 1000).toLocaleDateString(lang === 'ar' ? 'ar-SY' : lang, { month: 'short', day: 'numeric' });
                         }
 
@@ -1022,12 +1008,12 @@
                         `;
                         ratingsListDiv.appendChild(ratingDiv);
                     });
-                    ratingsListDiv.innerHTML += '</div>'; // Close wrapper div
+                    ratingsListDiv.innerHTML += '</div>'; 
                 }, (error) => {
                     console.error("Error loading ratings in onSnapshot:", error);
                     let errorMsg = getTranslation("error_loading_ratings_text", lang);
                      if (error.code === 'failed-precondition' && error.message.toLowerCase().includes('index')) {
-                        errorMsg = getTranslation("index_required_for_query_text", lang); // Specific error for missing index
+                        errorMsg = getTranslation("index_required_for_query_text", lang); 
                     }
                     ratingsListDiv.innerHTML = `<p class="text-red-600 text-xs p-1 ${isSwal ? '' : 'bg-red-50 rounded-md'}">${errorMsg}</p>`;
                 });
@@ -1045,21 +1031,19 @@
             const commentIdSuffix = isSwal ? `swal-rating-comment-${establishmentId}` : `rating-comment-${establishmentId}`;
 
             const feedbackDiv = document.getElementById(feedbackIdSuffix);
-            if (!feedbackDiv) return; // Should not happen if HTML is correct
-            feedbackDiv.textContent = ''; // Clear previous feedback
+            if (!feedbackDiv) return; 
+            feedbackDiv.textContent = ''; 
 
-            if (!initialAuthCheckCompleted || !db || !auth.currentUser) { // User must be logged in (even anonymously, though ideally not for rating)
+            if (!initialAuthCheckCompleted || !db || !auth.currentUser) { 
                  feedbackDiv.textContent = getTranslation("login_to_rate_text", lang);
                  feedbackDiv.className = 'text-red-600 text-xs mt-1';
                  return;
             }
-            // For actual rating, you might want to restrict anonymous users further or prompt login
-            // if (auth.currentUser.isAnonymous) { ... }
-
+            
             const satisfactionLevelEl = document.getElementById(satisfactionIdSuffix);
             const commentEl = document.getElementById(commentIdSuffix);
 
-            if (!satisfactionLevelEl || !commentEl) return; // Should not happen
+            if (!satisfactionLevelEl || !commentEl) return; 
 
             const satisfactionLevel = satisfactionLevelEl.value;
             const comment = commentEl.value.trim();
@@ -1074,18 +1058,16 @@
             feedbackDiv.className = 'text-indigo-600 text-xs mt-1';
 
             try {
-                // Path to public ratings data
                 const ratingsPath = `artifacts/${appId}/public/data/ratings`;
                 await addDoc(collection(db, ratingsPath), {
                     establishmentId: establishmentId,
-                    userId: auth.currentUser.uid, // Store user ID for reference/moderation
-                    visitorName: auth.currentUser.displayName || (auth.currentUser.email ? auth.currentUser.email.split('@')[0] : '') || getTranslation("visitor_text", lang), // Use display name, or part of email, or generic
+                    userId: auth.currentUser.uid, 
+                    visitorName: auth.currentUser.displayName || (auth.currentUser.email ? auth.currentUser.email.split('@')[0] : '') || getTranslation("visitor_text", lang), 
                     satisfactionLevel: parseInt(satisfactionLevel),
                     comment: comment,
-                    createdAt: serverTimestamp() // Use server timestamp
+                    createdAt: serverTimestamp() 
                 });
 
-                // Update average rating and rating count on the establishment document
                 const establishmentRef = doc(db, `artifacts/${appId}/public/data/establishments`, establishmentId);
                 const establishmentDoc = await getDoc(establishmentRef);
 
@@ -1103,8 +1085,8 @@
 
                 feedbackDiv.textContent = getTranslation("rating_submitted_successfully_text", lang);
                 feedbackDiv.className = 'text-green-600 text-xs mt-1';
-                commentEl.value = ''; // Clear comment box
-                if (isSwal) loadRatingsForEstablishment(establishmentId, true); // Refresh ratings list in Swal
+                commentEl.value = ''; 
+                if (isSwal) loadRatingsForEstablishment(establishmentId, true); 
 
             } catch (error) {
                 console.error("Error submitting rating:", error);
@@ -1116,47 +1098,48 @@
         // Load paid/featured ads
         async function loadPaidAds() {
             const lang = getCurrentLanguage();
-            if (!initialAuthCheckCompleted || !db || !paidAdsBanner) return; // Ensure prerequisites
-            paidAdsBanner.innerHTML = ''; // Clear previous ads
+            if (!initialAuthCheckCompleted || !db || !paidAdsBanner) return; 
+            paidAdsBanner.innerHTML = ''; 
 
             try {
-                // Path to public establishments data
                 const publicEstablishmentsPath = `artifacts/${appId}/public/data/establishments`;
                 const q = query(collection(db, publicEstablishmentsPath), where("isPaidAd", "==", true), where("status", "==", "approved"), orderBy("publishedAt", "desc"), limit(5));
                 const querySnapshot = await getDocs(q);
 
                 if (querySnapshot.empty) {
-                    paidAdsBanner.classList.add('hidden'); // Hide banner if no paid ads
+                    paidAdsBanner.classList.add('hidden'); 
                     return;
                 }
 
-                paidAdsBanner.classList.remove('hidden'); // Show banner
+                paidAdsBanner.classList.remove('hidden'); 
                 let adItemsHtml = '';
                 querySnapshot.forEach((docSnap) => {
                     const ad = docSnap.data();
                     const adName = getTranslatedFieldValue(ad.name, lang) || getTranslation("establishment_name_not_available", lang);
                     const adImage = ad.photos && ad.photos.length > 0 && ad.photos[0].startsWith('data:image')
                                   ? ad.photos[0]
-                                  : `https://placehold.co/100x100/FFF8E1/A29BFE?text=${encodeURIComponent(adName.charAt(0))}&font=cairo`; // Placeholder with first letter
+                                  : `https://placehold.co/150x150/FFD700/4A5568?text=${encodeURIComponent(adName.charAt(0))}&font=cairo`; 
 
                     adItemsHtml += `
-                        <li class="flex items-center p-2 hover:bg-yellow-500/20 rounded-lg cursor-pointer transition-colors duration-200" data-establishment-id="${docSnap.id}">
-                            <img src="${adImage}" alt="${adName}" class="w-10 h-10 rounded-md object-cover ${lang === 'ar' ? 'ml-3 mr-2' : 'mr-3 ml-2'} shadow-sm">
-                            <span class="font-semibold text-sm text-yellow-900 group-hover:text-yellow-700">${adName}</span>
-                        </li>`;
+                        <div class="bg-white rounded-xl shadow-lg overflow-hidden transform hover:scale-105 transition-transform duration-300 cursor-pointer" data-establishment-id="${docSnap.id}">
+                            <img src="${adImage}" alt="${adName}" class="w-full h-32 sm:h-40 object-cover">
+                            <div class="p-3 text-center">
+                                <h4 class="font-semibold text-sm sm:text-base text-yellow-700 group-hover:text-yellow-600 truncate" title="${adName}">${adName}</h4>
+                            </div>
+                        </div>`;
                 });
                  paidAdsBanner.innerHTML = `
-                    <div class="bg-gradient-to-r from-amber-400 to-yellow-500 p-4 rounded-xl shadow-xl text-white group">
-                        <h3 class="font-extrabold text-xl mb-3 flex items-center">
-                            <i class="fas fa-bullhorn ${lang === 'ar' ? 'ml-2' : 'mr-2'} text-2xl animate-pulse"></i><span data-translate-key="paid_ads_banner_title">${getTranslation("paid_ads_banner_title", lang)}</span>
+                    <div class="bg-gradient-to-r from-amber-400 via-yellow-400 to-orange-400 p-4 sm:p-6 rounded-xl shadow-xl text-white group mb-6">
+                        <h3 class="font-extrabold text-xl sm:text-2xl mb-4 flex items-center justify-center sm:justify-start">
+                            <i class="fas fa-star-and-crescent ${lang === 'ar' ? 'ml-3' : 'mr-3'} text-2xl sm:text-3xl text-white animate-pulse"></i>
+                            <span data-translate-key="paid_ads_banner_title">${getTranslation("paid_ads_banner_title", lang)}</span>
                         </h3>
-                        <ul class="space-y-1.5">
+                        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
                             ${adItemsHtml}
-                        </ul>
+                        </div>
                     </div>`;
 
-                // Add click listeners to paid ad items to show details
-                paidAdsBanner.querySelectorAll('li[data-establishment-id]').forEach(item => {
+                paidAdsBanner.querySelectorAll('div[data-establishment-id]').forEach(item => {
                     item.addEventListener('click', (e) => {
                         const estId = e.currentTarget.dataset.establishmentId;
                         if(estId) window.showEstablishmentDetails(estId);
@@ -1167,7 +1150,7 @@
             } catch (error) {
                 console.error("Error fetching paid ads: ", error);
                 paidAdsBanner.innerHTML = `<p class="text-red-600 text-center p-3 bg-red-50 rounded">${getTranslation("error_loading_paid_ads", lang)}</p>`;
-                paidAdsBanner.classList.remove('hidden'); // Still show banner but with error
+                paidAdsBanner.classList.remove('hidden'); 
             }
         }
 
@@ -1207,18 +1190,18 @@
                     </div>
                 `,
                 confirmButtonText: getTranslation("login_btn_modal", lang),
-                confirmButtonColor: '#10B981', // A green color
+                confirmButtonColor: '#10B981', 
                 showCancelButton: true,
                 cancelButtonText: getTranslation("cancel_btn", lang),
                 focusConfirm: false,
                 showLoaderOnConfirm: true,
                 customClass: {
                     popup: 'rounded-xl shadow-2xl',
-                    title: 'pt-5', // Tailwind class for padding-top
+                    title: 'pt-5', 
                     htmlContainer: 'pt-0 pb-2',
-                    actions: 'w-full flex justify-between px-4 pb-4 gap-3', // Spacing for buttons
-                    confirmButton: 'btn-primary bg-green-500 hover:bg-green-600 focus:ring-green-500 flex-1', // Custom class for confirm
-                    cancelButton: 'btn-secondary flex-1' // Custom class for cancel
+                    actions: 'w-full flex justify-between px-4 pb-4 gap-3', 
+                    confirmButton: 'btn-primary bg-green-500 hover:bg-green-600 focus:ring-green-500 flex-1', 
+                    cancelButton: 'btn-secondary flex-1' 
                 },
                 footer: `<a href="#" id="swal-switch-to-register" class="text-indigo-600 hover:underline text-sm font-medium">${getTranslation("no_account_switch_to_register", lang)}</a>`,
                 didOpen: () => {
@@ -1232,24 +1215,24 @@
                     const email = Swal.getPopup().querySelector('#swal-login-email').value;
                     const password = Swal.getPopup().querySelector('#swal-login-password').value;
                     const feedbackDiv = Swal.getPopup().querySelector('#swal-login-feedback');
-                    feedbackDiv.textContent = ''; // Clear previous feedback
+                    feedbackDiv.textContent = ''; 
 
                     if (!email || !password) {
                         Swal.showValidationMessage(getTranslation("fill_all_fields_validation", lang));
-                        return false; // Prevent closing
+                        return false; 
                     }
                     try {
                         await signInWithEmailAndPassword(auth, email, password);
-                        return true; // Proceed to close
+                        return true; 
                     } catch (error) {
                         console.error("Swal Login error:", error);
                         let errorMessage = getTranslation("login_fail_message_generic", lang);
                         if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
                             errorMessage = getTranslation("login_fail_message_specific", lang);
                         }
-                        Swal.showValidationMessage(errorMessage); // Show error message in Swal
-                        feedbackDiv.textContent = errorMessage; // Also show in custom feedback div
-                        return false; // Prevent closing
+                        Swal.showValidationMessage(errorMessage); 
+                        feedbackDiv.textContent = errorMessage; 
+                        return false; 
                     }
                 }
             }).then((result) => {
@@ -1296,11 +1279,11 @@
                 cancelButtonText: getTranslation("cancel_btn", lang),
                 focusConfirm: false,
                 showLoaderOnConfirm: true,
-                 customClass: { // Apply custom styling
+                 customClass: { 
                     popup: 'rounded-xl',
-                    actions: 'w-full flex justify-between', // Ensure buttons are spaced
-                    confirmButton: 'btn-primary', // Your custom class
-                    cancelButton: 'btn-secondary' // Your custom class
+                    actions: 'w-full flex justify-between', 
+                    confirmButton: 'btn-primary', 
+                    cancelButton: 'btn-secondary' 
                 },
                 footer: `<a href="#" id="swal-switch-to-login" class="text-indigo-600 hover:underline text-sm">${getTranslation("already_have_account_switch_to_login", lang)}</a>`,
                 didOpen: () => {
@@ -1316,32 +1299,30 @@
                     const password = Swal.getPopup().querySelector('#swal-register-password').value;
                     const selectedRoleInput = Swal.getPopup().querySelector('input[name="swal-account-type"]:checked');
                     const feedbackDiv = Swal.getPopup().querySelector('#swal-register-feedback');
-                    const roleFeedbackDiv = Swal.getPopup().querySelector('#swal-role-feedback'); // Get role feedback div
-                    feedbackDiv.textContent = ''; // Clear previous general feedback
-                    roleFeedbackDiv.textContent = ''; // Clear previous role feedback
+                    const roleFeedbackDiv = Swal.getPopup().querySelector('#swal-role-feedback'); 
+                    feedbackDiv.textContent = ''; 
+                    roleFeedbackDiv.textContent = ''; 
 
                     if (!name || !email || !password) {
                         Swal.showValidationMessage(getTranslation("fill_all_fields_validation", lang));
                         return false;
                     }
                      if (!selectedRoleInput) {
-                        roleFeedbackDiv.textContent = getTranslation("select_account_type_validation", lang); // Show error in role feedback
-                        Swal.showValidationMessage(getTranslation("select_account_type_validation", lang)); // Also show in Swal validation
+                        roleFeedbackDiv.textContent = getTranslation("select_account_type_validation", lang); 
+                        Swal.showValidationMessage(getTranslation("select_account_type_validation", lang)); 
                         return false;
                     }
                     const role = selectedRoleInput.value;
 
                     try {
                         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-                        // Path to user profile: /artifacts/{appId}/users/{userId}/profile/info
                         const userDocRef = doc(db, `artifacts/${appId}/users/${userCredential.user.uid}/profile`, 'info');
                         await setDoc(userDocRef, {
                             name: name,
                             email: email,
-                            role: role, // 'investor' or 'visitor'
+                            role: role, 
                             createdAt: serverTimestamp()
                         });
-                        // User role is set, onAuthStateChanged will handle UI updates
                         return true;
                     } catch (error) {
                         console.error("Swal Registration error:", error);
@@ -1370,12 +1351,11 @@
             let governorateOptionsHtml = governorateKeys.slice(1).map(govKey => `<option value="${govKey}" ${savedData.governorateKey === govKey ? 'selected' : ''}>${getTranslation(govKey, lang)}</option>`).join('');
 
             let currentCoordsDisplay = "";
-            const coordsToUse = savedData.coordinates || window.selectedCoordsForNewEstablishment; // Use saved or newly picked
-            if (coordsToUse) { // coordsToUse could be Leaflet LatLng object or simple {lat, lng}
+            const coordsToUse = savedData.coordinates || window.selectedCoordsForNewEstablishment; 
+            if (coordsToUse) { 
                 currentCoordsDisplay = `${coordsToUse.lat.toFixed(5)}, ${coordsToUse.lng.toFixed(5)}`;
             }
             
-            // Generate input fields for each supported language
             let nameInputsHTML = '', descriptionInputsHTML = '', locationInputsHTML = '', priceInputsHTML = '';
             supportedLanguages.forEach(lObj => {
                 nameInputsHTML += `
@@ -1454,23 +1434,22 @@
                 cancelButtonText: getTranslation("cancel_btn", lang),
                 focusConfirm: false,
                 showLoaderOnConfirm: true,
-                width: '90%', // Responsive width
-                maxWidth: '700px', // Max width for larger screens
+                width: '90%', 
+                maxWidth: '700px', 
                 customClass: {
                     popup: 'rounded-xl',
-                    actions: 'w-full flex justify-between mt-4', // Ensure buttons are spaced
-                    confirmButton: 'btn-primary bg-amber-500 hover:bg-amber-600 focus:ring-amber-500', // Custom class for confirm
-                    cancelButton: 'btn-secondary' // Custom class for cancel
+                    actions: 'w-full flex justify-between mt-4', 
+                    confirmButton: 'btn-primary bg-amber-500 hover:bg-amber-600 focus:ring-amber-500', 
+                    cancelButton: 'btn-secondary' 
                 },
                 didOpen: () => {
                     const photosInput = Swal.getPopup().querySelector('#swal-establishment-photos');
                     const previewContainer = Swal.getPopup().querySelector('#swal-photo-preview-container');
-                    // Photo preview logic (simplified, consider adding more robust handling)
                     if (photosInput && previewContainer) {
                         photosInput.addEventListener('change', function(event) {
-                            previewContainer.innerHTML = ''; // Clear previous previews
+                            previewContainer.innerHTML = ''; 
                             if (this.files) {
-                                Array.from(this.files).slice(0, 5).forEach(file => { // Limit to 5 previews
+                                Array.from(this.files).slice(0, 5).forEach(file => { 
                                     const reader = new FileReader();
                                     reader.onload = (e) => {
                                         const img = document.createElement('img');
@@ -1487,9 +1466,8 @@
                     const selectLocationBtn = Swal.getPopup().querySelector('#swal-select-location-btn');
                     if (selectLocationBtn) {
                         selectLocationBtn.addEventListener('click', () => {
-                            // Save current form data to window.tempEstablishmentData before closing Swal
                             const currentForm = Swal.getPopup().querySelector('#swal-add-establishment-form');
-                            window.tempEstablishmentData.name = {}; // Initialize as object
+                            window.tempEstablishmentData.name = {}; 
                             window.tempEstablishmentData.description = {};
                             window.tempEstablishmentData.location = {};
                             window.tempEstablishmentData.priceRange = {};
@@ -1503,20 +1481,19 @@
                             
                             window.tempEstablishmentData.categoryKey = currentForm.querySelector('#swal-establishment-category').value;
                             window.tempEstablishmentData.governorateKey = currentForm.querySelector('#swal-establishment-governorate').value;
-                            // window.selectedCoordsForNewEstablishment might already be set from a previous pick
                             window.tempEstablishmentData.coordinates = window.selectedCoordsForNewEstablishment; 
 
-                            Swal.close(); // Close current Swal
-                            setTimeout(() => { // Open new Swal after a short delay
+                            Swal.close(); 
+                            setTimeout(() => { 
                                 openLocationPickerForEstablishment();
-                            }, 150); // Delay to ensure first Swal is fully closed
+                            }, 150); 
                         });
                     }
                 },
                 preConfirm: async () => {
                     const form = Swal.getPopup().querySelector('#swal-add-establishment-form');
                     const feedbackDiv = Swal.getPopup().querySelector('#swal-add-establishment-feedback');
-                    feedbackDiv.textContent = ''; // Clear previous feedback
+                    feedbackDiv.textContent = ''; 
 
                     if (!auth.currentUser || userRole !== 'investor') {
                         Swal.showValidationMessage(getTranslation("add_establishment_validation_error_auth", lang));
@@ -1525,15 +1502,15 @@
 
                     const establishmentName = {};
                     const establishmentDescription = {};
-                    const establishmentLocation = {}; // For multilingual descriptive location
-                    const establishmentPriceRange = {}; // For multilingual price range
+                    const establishmentLocation = {}; 
+                    const establishmentPriceRange = {}; 
                     let hasAtLeastOneName = false;
 
                     supportedLanguages.forEach(lObj => {
                         const nameVal = form.querySelector(`#swal-establishment-name-${lObj.code}`).value.trim();
                         if (nameVal) {
                             establishmentName[lObj.code] = nameVal;
-                            if (lObj.code === 'ar' || !hasAtLeastOneName) hasAtLeastOneName = true; // Check if at least one name (preferable Arabic) is filled
+                            if (lObj.code === 'ar' || !hasAtLeastOneName) hasAtLeastOneName = true; 
                         }
                         establishmentDescription[lObj.code] = form.querySelector(`#swal-establishment-description-${lObj.code}`).value.trim();
                         establishmentLocation[lObj.code] = form.querySelector(`#swal-establishment-location-${lObj.code}`).value.trim();
@@ -1541,35 +1518,34 @@
                     });
 
 
-                    const categoryKey = form.querySelector('#swal-establishment-category').value; // This is the canonical key
-                    const governorateKey = form.querySelector('#swal-establishment-governorate').value; // Canonical key
+                    const categoryKey = form.querySelector('#swal-establishment-category').value; 
+                    const governorateKey = form.querySelector('#swal-establishment-governorate').value; 
                     const photosInput = form.querySelector('#swal-establishment-photos');
 
-                    if (!hasAtLeastOneName || !categoryKey || !governorateKey) { // Check hasAtLeastOneName
+                    if (!hasAtLeastOneName || !categoryKey || !governorateKey) { 
                         Swal.showValidationMessage(getTranslation("add_establishment_validation_error", lang));
                         return false;
                     }
-                     if (!window.selectedCoordsForNewEstablishment) { // Ensure coordinates are picked
+                     if (!window.selectedCoordsForNewEstablishment) { 
                         Swal.showValidationMessage(getTranslation("select_location_validation_error", lang));
                         return false;
                     }
 
-                    feedbackDiv.className = 'feedback-info text-xs'; // Use Tailwind for styling
+                    feedbackDiv.className = 'feedback-info text-xs'; 
                     feedbackDiv.textContent = getTranslation("adding_establishment_feedback", lang);
 
                     try {
                         let photoBase64Strings = [];
                         if (photosInput.files.length > 0) {
-                            for (const file of Array.from(photosInput.files).slice(0, 5)) { // Limit to 5 files
-                                // Simple client-side compression (adjust quality/size as needed)
+                            for (const file of Array.from(photosInput.files).slice(0, 5)) { 
                                 const compressedBase64 = await new Promise((resolve, reject) => {
                                     const reader = new FileReader();
                                     reader.onload = (event) => {
                                         const img = new Image();
                                         img.onload = () => {
                                             const canvas = document.createElement('canvas');
-                                            const MAX_WIDTH = 800; // Max width for compression
-                                            const MAX_HEIGHT = 600; // Max height
+                                            const MAX_WIDTH = 800; 
+                                            const MAX_HEIGHT = 600; 
                                             let width = img.width;
                                             let height = img.height;
 
@@ -1578,7 +1554,7 @@
                                             canvas.width = width; canvas.height = height;
                                             const ctx = canvas.getContext('2d');
                                             ctx.drawImage(img, 0, 0, width, height);
-                                            resolve(canvas.toDataURL('image/jpeg', 0.7)); // Compress to JPEG with 70% quality
+                                            resolve(canvas.toDataURL('image/jpeg', 0.7)); 
                                         };
                                         img.onerror = reject;
                                         img.src = event.target.result;
@@ -1592,46 +1568,42 @@
 
                         const establishmentDocData = {
                             ownerId: auth.currentUser.uid, ownerEmail: auth.currentUser.email,
-                            name: establishmentName, // Object with multilingual names
-                            description: establishmentDescription, // Object with multilingual descriptions
-                            location: establishmentLocation, // This now stores the object of multilingual location texts
-                            priceRange: establishmentPriceRange, // This now stores multilingual price texts
-                            categoryKey: categoryKey, // Storing canonical key
-                            governorateKey: governorateKey, // Storing canonical key
+                            name: establishmentName, 
+                            description: establishmentDescription, 
+                            location: establishmentLocation, 
+                            priceRange: establishmentPriceRange, 
+                            categoryKey: categoryKey, 
+                            governorateKey: governorateKey, 
                             coordinates: new GeoPoint(window.selectedCoordsForNewEstablishment.lat, window.selectedCoordsForNewEstablishment.lng),
-                            photos: photoBase64Strings, // Array of base64 strings
+                            photos: photoBase64Strings, 
                             averageRating: 0, ratingCount: 0, isPaidAd: false,
-                            paidAdRequestStatus: "none", // e.g., 'none', 'pending', 'approved', 'rejected'
-                            publishedAt: serverTimestamp(), status: "pending" // Default status
+                            paidAdRequestStatus: "none", 
+                            publishedAt: serverTimestamp(), status: "pending" 
                         };
                         
-                        // Path to public establishments data
                         const publicEstablishmentsPath = `artifacts/${appId}/public/data/establishments`;
                         await addDoc(collection(db, publicEstablishmentsPath), establishmentDocData);
-                        window.selectedCoordsForNewEstablishment = null; // Clear after successful submission
-                        window.tempEstablishmentData = {}; // Clear temp data
-                        return true; // Proceed to close Swal
+                        window.selectedCoordsForNewEstablishment = null; 
+                        window.tempEstablishmentData = {}; 
+                        return true; 
                     } catch (error) {
                         console.error("Swal Add Establishment error:", error);
                         const errMsg = `${getTranslation("add_establishment_error_feedback", lang)} ${error.message}`;
                         Swal.showValidationMessage(errMsg);
                         feedbackDiv.className = 'feedback-error text-xs';
                         feedbackDiv.textContent = errMsg;
-                        return false; // Prevent closing
+                        return false; 
                     }
                 }
             }).then((result) => {
                 if (result.isConfirmed) {
                     Swal.fire(getTranslation("registration_success_title", lang), getTranslation("add_establishment_success_text", lang), 'success');
                 } else if (result.dismiss === Swal.DismissReason.cancel) {
-                    // If cancelled, re-open the add establishment modal with the temporarily saved data
                     console.log("Add establishment Swal cancelled. Restoring with temp data if available.");
-                    const dataToRestoreOnCancel = { ...window.tempEstablishmentData }; // Get a copy
-                    // Ensure coordinates are also part of what's restored if they were picked
+                    const dataToRestoreOnCancel = { ...window.tempEstablishmentData }; 
                     if (window.selectedCoordsForNewEstablishment) {
                         dataToRestoreOnCancel.coordinates = window.selectedCoordsForNewEstablishment;
                     }
-                    // Only re-open if there's actually data to restore (e.g., name, category, or coords)
                      if (Object.values(dataToRestoreOnCancel.name || {}).some(v => v) || 
                         Object.values(dataToRestoreOnCancel.description || {}).some(v => v) ||
                         Object.values(dataToRestoreOnCancel.location || {}).some(v => v) ||
@@ -1640,10 +1612,7 @@
                         showAddEstablishmentModal(dataToRestoreOnCancel);
                     }
                 }
-                 // Always clear temp data after the modal interaction is fully complete (confirmed or fully dismissed without re-opening)
-                 // This might be better placed inside the .then if confirmed, and handled carefully on cancel if re-opening.
-                 // For now, clearing it here if not re-opened.
-                 if (!result.isConfirmed && result.dismiss === Swal.DismissReason.cancel && !Object.values(window.tempEstablishmentData.name || {}).some(v => v) /* and other checks */) {
+                 if (!result.isConfirmed && result.dismiss === Swal.DismissReason.cancel && !Object.values(window.tempEstablishmentData.name || {}).some(v => v) ) {
                     window.tempEstablishmentData = {};
                  }
             });
@@ -1652,9 +1621,8 @@
         // Open location picker modal
         function openLocationPickerForEstablishment() {
             const lang = getCurrentLanguage();
-            let tempMarker = null; // Temporary marker on the picker map
-            let pickerMapInstance = null; // Instance of the picker map
-            // Use previously selected coords if available, otherwise null
+            let tempMarker = null; 
+            let pickerMapInstance = null; 
             let localSelectedCoords = window.selectedCoordsForNewEstablishment ? L.latLng(window.selectedCoordsForNewEstablishment.lat, window.selectedCoordsForNewEstablishment.lng) : null;
 
             Swal.fire({
@@ -1675,19 +1643,18 @@
                     const useMyLocBtn = Swal.getPopup().querySelector('#use-my-current-location-btn-picker');
 
                     if (mapElement) {
-                        const initialView = localSelectedCoords ? [localSelectedCoords.lat, localSelectedCoords.lng] : [35.0, 38.0]; // Syria center or saved point
+                        const initialView = localSelectedCoords ? [localSelectedCoords.lat, localSelectedCoords.lng] : [35.0, 38.0]; 
                         const initialZoom = localSelectedCoords ? 15 : 6;
                         pickerMapInstance = L.map(mapElement).setView(initialView, initialZoom);
                         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(pickerMapInstance);
 
-                        // If coords were previously selected, show marker
                         if(localSelectedCoords){
                              tempMarker = L.marker(localSelectedCoords).addTo(pickerMapInstance).bindPopup(getTranslation("map_marker_selected_location", lang)).openPopup();
                         }
 
                         pickerMapInstance.on('click', function(e) {
                             if (tempMarker) pickerMapInstance.removeLayer(tempMarker);
-                            localSelectedCoords = e.latlng; // Store Leaflet LatLng object
+                            localSelectedCoords = e.latlng; 
                             tempMarker = L.marker(e.latlng).addTo(pickerMapInstance)
                                 .bindPopup(getTranslation("map_marker_establishment_location", lang)).openPopup();
                             console.log("Map Picker: Location selected by click - ", localSelectedCoords);
@@ -1701,7 +1668,7 @@
                                     const userLat = position.coords.latitude;
                                     const userLng = position.coords.longitude;
                                     if (tempMarker) pickerMapInstance.removeLayer(tempMarker);
-                                    localSelectedCoords = L.latLng(userLat, userLng); // Store Leaflet LatLng object
+                                    localSelectedCoords = L.latLng(userLat, userLng); 
                                     tempMarker = L.marker(localSelectedCoords).addTo(pickerMapInstance)
                                         .bindPopup(getTranslation("map_marker_current_location_selected", lang)).openPopup();
                                     pickerMapInstance.setView(localSelectedCoords, 15);
@@ -1713,7 +1680,7 @@
                                 });
                             });
                         } else if (!navigator.geolocation && useMyLocBtn) {
-                             useMyLocBtn.disabled = true; // Disable if geolocation not supported
+                             useMyLocBtn.disabled = true; 
                              useMyLocBtn.textContent = getTranslation("map_marker_geolocation_not_supported", lang);
                         }
                     } else {
@@ -1723,30 +1690,27 @@
                 preConfirm: () => {
                     if (!localSelectedCoords) {
                         Swal.showValidationMessage(getTranslation("location_picker_validation_error", lang));
-                        return false; // Prevent closing if no location picked
+                        return false; 
                     }
-                    return localSelectedCoords; // Return the Leaflet LatLng object
+                    return localSelectedCoords; 
                 },
-                willClose: () => { // Cleanup map instance when Swal closes
+                willClose: () => { 
                     if (pickerMapInstance) {
                         pickerMapInstance.remove();
                         pickerMapInstance = null;
                     }
                 }
             }).then((result) => {
-                const dataToRestore = { ...window.tempEstablishmentData }; // Get a copy of temp data
+                const dataToRestore = { ...window.tempEstablishmentData }; 
                 if (result.isConfirmed && result.value) {
-                    // result.value is the Leaflet LatLng object
-                    window.selectedCoordsForNewEstablishment = { lat: result.value.lat, lng: result.value.lng }; // Store as simple object
+                    window.selectedCoordsForNewEstablishment = { lat: result.value.lat, lng: result.value.lng }; 
                     console.log("Map Picker: Confirmed coordinates", window.selectedCoordsForNewEstablishment);
-                    dataToRestore.coordinates = window.selectedCoordsForNewEstablishment; // Update dataToRestore with new coords
+                    dataToRestore.coordinates = window.selectedCoordsForNewEstablishment; 
                 } else {
-                    // If cancelled, use the coords that were in tempEstablishmentData (or null if none)
                     console.log("Map Picker: Cancelled. Re-opening add form with previous data.");
                     dataToRestore.coordinates = window.tempEstablishmentData.coordinates || null;
                 }
-                // Re-open the add establishment modal with (potentially updated) temp data
-                setTimeout(() => { // Ensure Swal is fully closed before opening new one
+                setTimeout(() => { 
                     showAddEstablishmentModal(dataToRestore);
                 }, 150);
             });
@@ -1756,20 +1720,18 @@
         // Request to make an establishment a paid ad
         async function requestPaidAd(establishmentId) {
             const lang = getCurrentLanguage();
-            if (!auth.currentUser || !db) { // User must be logged in
+            if (!auth.currentUser || !db) { 
                 Swal.fire(getTranslation("establishment_details_error_title", lang), getTranslation("request_paid_ad_error_login", lang), 'error');
                 return;
             }
-            // Path to public establishment data
             const establishmentRef = doc(db, `artifacts/${appId}/public/data/establishments`, establishmentId);
             try {
                 await updateDoc(establishmentRef, {
-                    paidAdRequestStatus: "pending" // Set status to pending
+                    paidAdRequestStatus: "pending" 
                 });
                 Swal.fire(getTranslation("request_paid_ad_success_title", lang), getTranslation("request_paid_ad_success_text", lang), 'success').then(() => {
-                    // Optionally, refresh the details modal if it's open
-                    if (Swal.isVisible()) Swal.close(); // Close current Swal
-                    setTimeout(() => window.showEstablishmentDetails(establishmentId), 100); // Re-open with updated info
+                    if (Swal.isVisible()) Swal.close(); 
+                    setTimeout(() => window.showEstablishmentDetails(establishmentId), 100); 
                 });
             } catch (error) {
                 console.error("Error requesting paid ad:", error);
@@ -1784,12 +1746,10 @@
             logoutButton.addEventListener('click', async () => {
                 try {
                     console.log("Auth: User initiated logout.");
-                    isAuthDataLoaded = false; // Reset flag, data will reload on next auth state (anonymous)
+                    isAuthDataLoaded = false; 
                     await signOut(auth);
-                    // onAuthStateChanged will handle UI updates and anonymous sign-in
                 } catch (error) {
                     console.error("Logout error:", error);
-                    // Handle logout error if necessary
                 }
             });
         }
@@ -1798,10 +1758,8 @@
         document.addEventListener('DOMContentLoaded', () => {
             console.log("DOM fully loaded and parsed. Setting up event listeners.");
             
-            // Initialize language switcher
             const langSelect = document.getElementById('lang-select');
             if (langSelect) {
-                // Populate options
                 supportedLanguages.forEach(l => {
                     const option = document.createElement('option');
                     option.value = l.code;
@@ -1816,14 +1774,25 @@
                 });
             }
             
-            applyTranslationsToUI(); // Apply initial translations (this also calls populateFilters)
+            applyTranslationsToUI(); 
 
-            // Add event listeners for filters AFTER they are populated
-            if (categoryFilter) categoryFilter.addEventListener('change', () => loadEstablishments());
-            if (governorateFilter) governorateFilter.addEventListener('change', () => loadEstablishments());
+            // Apply Filters button listener
+            if (applyFiltersBtn) {
+                 applyFiltersBtn.addEventListener('click', () => loadEstablishments());
+            }
+            // Also trigger loadEstablishments if Enter key is pressed in name search input
+            if (nameSearchInput) {
+                nameSearchInput.addEventListener('keypress', (event) => {
+                    if (event.key === 'Enter') {
+                        loadEstablishments();
+                    }
+                });
+            }
+             // Optional: reload on category/governorate change if you want instant feedback without pressing "Apply"
+            // if (categoryFilter) categoryFilter.addEventListener('change', () => loadEstablishments());
+            // if (governorateFilter) governorateFilter.addEventListener('change', () => loadEstablishments());
 
 
-            // Generic close modal buttons (for non-SweetAlert modals)
             document.querySelectorAll('[data-close-modal]').forEach(button => {
                 button.addEventListener('click', (event) => {
                     const modalId = event.target.closest('.modal-container')?.id || button.dataset.closeModal;
@@ -1834,7 +1803,6 @@
                 });
             });
 
-            // Login/Register button (uses SweetAlert)
             const loginRegisterBtn = document.getElementById('login-register-btn');
             if (loginRegisterBtn) {
                 loginRegisterBtn.addEventListener('click', () => {
@@ -1845,7 +1813,6 @@
                 console.error("Button with ID 'login-register-btn' not found in DOM.");
             }
 
-            // Add Establishment button (uses SweetAlert)
             const addEstablishmentBtn = document.getElementById('open-add-establishment-modal-btn');
             if (addEstablishmentBtn) {
                 addEstablishmentBtn.addEventListener('click', () => {
@@ -1858,7 +1825,6 @@
                  console.error("Button with ID 'open-add-establishment-modal-btn' not found in DOM.");
             }
 
-            // Manage Paid Ads button (uses HTML modal)
             const managePaidAdsBtn = document.getElementById('open-manage-paid-ads-modal-btn');
             if (managePaidAdsBtn) {
                 managePaidAdsBtn.addEventListener('click', () => {
@@ -1869,23 +1835,23 @@
                 console.error("Button with ID 'open-manage-paid-ads-modal-btn' not found in DOM.");
             }
 
-            // "About Us" link - now uses SweetAlert
             const aboutUsLink = document.getElementById('about-us-link');
             if (aboutUsLink) {
                 aboutUsLink.addEventListener('click', (e) => {
-                    e.preventDefault(); 
+                    e.preventDefault();
                     const lang = getCurrentLanguage();
                     Swal.fire({
                         title: getTranslation("about_us_modal_title", lang),
                         html: `
-                            <div class="prose prose-sm sm:prose-base text-gray-700 text-${lang === 'ar' ? 'right' : 'left'} space-y-4 leading-relaxed p-4">
+                            <div class="prose prose-sm sm:prose-base text-${lang === 'ar' ? 'right' : 'left'} space-y-3 leading-relaxed p-2 text-gray-700">
                                 <p>${getTranslation("about_us_modal_content1", lang)}</p>
                                 <p>${getTranslation("about_us_modal_content2", lang)}</p>
-                            </div>`,
+                            </div>
+                        `,
                         confirmButtonText: getTranslation("got_it_btn", lang),
-                        customClass: {
+                        customClass: { 
                             popup: 'rounded-xl',
-                            confirmButton: 'btn-primary'
+                            htmlContainer: 'text-sm sm:text-base' 
                         }
                     });
                 });
@@ -1893,62 +1859,48 @@
                 console.error("Link with ID 'about-us-link' not found in DOM.");
             }
 
-            // "Complaints & Suggestions" link - now uses SweetAlert
-            const complaintsLink = document.getElementById('complaints-suggestions-link-sidebar');
+            const complaintsLink = document.getElementById('complaints-suggestions-link');
             if (complaintsLink) {
-                complaintsLink.href = "#"; // Prevent default mailto action
                 complaintsLink.addEventListener('click', (e) => {
                     e.preventDefault();
                     const lang = getCurrentLanguage();
-                    const complaintsEmail = "hackmack040@gmail.com";
+                    const complaintEmail = "hackmack040@gmail.com";
                     Swal.fire({
-                        title: getTranslation("complaints_suggestions_link", lang),
+                        title: getTranslation("complaints_suggestions_modal_title", lang),
                         html: `
-                            <div class="text-${lang === 'ar' ? 'right' : 'left'} p-4">
-                                <p class="mb-3">${getTranslation("complaints_modal_intro_text", lang)}</p>
-                                <p class="mb-4">
-                                    <a href="mailto:${complaintsEmail}?subject=${encodeURIComponent(getTranslation('complaints_suggestions_link', lang))}" class="text-indigo-600 hover:underline font-semibold text-lg">${complaintsEmail}</a>
-                                </p>
-                                <button id="copy-complaints-email-btn" class="btn-secondary text-sm py-2 px-4">
-                                    <i class="fas fa-copy ${lang === 'ar' ? 'ml-2' : 'mr-2'}"></i>${getTranslation("copy_email_btn", lang)}
-                                </button>
-                                <p id="copy-feedback-swal" class="text-xs mt-2 text-green-600"></p>
-                            </div>`,
-                        showConfirmButton: true,
-                        confirmButtonText: getTranslation("got_it_btn", lang),
-                        customClass: {
-                            popup: 'rounded-xl',
-                            confirmButton: 'btn-primary'
-                        },
-                        didOpen: () => {
-                            const copyBtn = document.getElementById('copy-complaints-email-btn');
-                            const feedbackP = document.getElementById('copy-feedback-swal');
-                            if (copyBtn && feedbackP) {
-                                copyBtn.addEventListener('click', () => {
-                                    const tempInput = document.createElement("input");
-                                    tempInput.value = complaintsEmail;
-                                    document.body.appendChild(tempInput);
-                                    tempInput.select();
-                                    try {
-                                        document.execCommand('copy');
-                                        feedbackP.textContent = getTranslation("email_copied_feedback", lang);
-                                        setTimeout(() => feedbackP.textContent = '', 2000);
-                                    } catch (err) {
-                                        console.error('Failed to copy email: ', err);
-                                        feedbackP.textContent = 'Failed to copy.'; // Fallback message
-                                    }
-                                    document.body.removeChild(tempInput);
-                                });
+                            <p class="mb-3 text-gray-700 text-sm">${getTranslation("complaints_email_text", lang)}</p>
+                            <p class="font-semibold text-indigo-600 text-lg break-all mb-3">${complaintEmail}</p>
+                        `,
+                        confirmButtonText: `<i class="fas fa-copy ${lang === 'ar' ? 'ml-2' : 'mr-2'}"></i>${getTranslation("copy_email_btn", lang)}`,
+                        showCancelButton: true,
+                        cancelButtonText: getTranslation("cancel_btn", lang),
+                        customClass: { popup: 'rounded-xl' },
+                        preConfirm: () => {
+                            const tempInput = document.createElement("input");
+                            tempInput.style.position = "absolute";
+                            tempInput.style.left = "-1000px";
+                            tempInput.style.top = "-1000px";
+                            tempInput.value = complaintEmail;
+                            document.body.appendChild(tempInput);
+                            tempInput.select();
+                            try {
+                                document.execCommand('copy');
+                                Swal.showValidationMessage(getTranslation("email_copied_alert", lang)); 
+                                setTimeout(() => Swal.resetValidationMessage(), 1500); 
+                            } catch (err) {
+                                console.error('Fallback: Oops, unable to copy', err);
+                                Swal.showValidationMessage('Failed to copy email.'); 
                             }
+                            document.body.removeChild(tempInput);
+                            return false; 
                         }
                     });
                 });
             } else {
-                 console.error("Link with ID 'complaints-suggestions-link-sidebar' not found in DOM.");
+                console.error("Link with ID 'complaints-suggestions-link' not found in DOM.");
             }
 
 
-            // Event delegation for "View Details" buttons on establishment cards
             const establishmentsContainerEl = document.getElementById('establishments-container');
             if (establishmentsContainerEl) {
                 establishmentsContainerEl.addEventListener('click', (event) => {
@@ -1962,13 +1914,12 @@
                     }
                 });
             }
-             // Event delegation for paid ad items
             const paidAdsBannerEl = document.getElementById('paid-ads-banner');
             if (paidAdsBannerEl) {
                 paidAdsBannerEl.addEventListener('click', (event) => {
-                     const targetLi = event.target.closest('li[data-establishment-id]');
-                    if (targetLi) {
-                        const establishmentId = targetLi.dataset.establishmentId;
+                     const targetDiv = event.target.closest('div[data-establishment-id]'); // Target the div instead of li
+                    if (targetDiv) {
+                        const establishmentId = targetDiv.dataset.establishmentId;
                          if (establishmentId) {
                             console.log(`Paid ad item clicked for establishment ID: ${establishmentId}`);
                             window.showEstablishmentDetails(establishmentId);
@@ -1976,7 +1927,6 @@
                     }
                 });
             }
-            // Event delegation for "View Details" buttons from map popups
             document.addEventListener('click', function(event) {
                 if (event.target.classList.contains('show-details-btn-map')) {
                     const establishmentId = event.target.dataset.id;
@@ -1987,7 +1937,6 @@
                 }
             });
 
-            // "My Establishments" button
             const myEstablishmentsBtn = document.getElementById('show-my-establishments-btn');
             if (myEstablishmentsBtn) {
                 myEstablishmentsBtn.addEventListener('click', () => {
@@ -1995,11 +1944,11 @@
                     if (userId && userRole === 'investor') {
                         console.log("Show My Establishments button clicked.");
                         document.getElementById('main-content-area-title').textContent = getTranslation("my_establishments_page_title", lang);
-                        loadEstablishments(userId); // Filter by current user's ID
+                        loadEstablishments(userId); 
                     } else if (userId && userRole !== 'investor') {
                          Swal.fire(getTranslation("establishment_details_error_title", lang), getTranslation("my_establishments_owner_only_alert", lang), 'info');
                     }
-                    else { // Not logged in or role not determined
+                    else { 
                          Swal.fire(getTranslation("establishment_details_error_title", lang), getTranslation("my_establishments_login_alert", lang), 'info');
                     }
                 });
@@ -2013,190 +1962,208 @@
     <style>
         body {
             font-family: 'Cairo', sans-serif;
-            background-color: #f7f8fc; /* Light gray background */
-            color: #333; /* Default text color */
+            background-color: #f7f8fc; 
+            color: #333; 
         }
-        /* HTML Modals - Keep styles for modals not converted to SweetAlert */
         .modal-container {
              @apply fixed inset-0 z-[9990] bg-gray-900 bg-opacity-60 flex items-center justify-center p-4 backdrop-blur-sm transition-opacity duration-300 ease-in-out;
-             /* Added flex for centering and transition */
         }
         .modal-content {
             @apply bg-white p-6 sm:p-8 rounded-xl shadow-2xl w-full max-h-[90vh] overflow-y-auto;
-             /* Custom scrollbar for modal content */
         }
         .modal-content::-webkit-scrollbar { width: 6px; }
         .modal-content::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 10px; }
         .modal-content::-webkit-scrollbar-thumb { background: #cbd5e0; border-radius: 10px; }
         .modal-content::-webkit-scrollbar-thumb:hover { background: #a0aec0; }
 
-        /* Animation for cards */
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(20px); }
             to { opacity: 1; transform: translateY(0); }
         }
         #establishments-container > div { animation: fadeIn 0.5s ease-out forwards; }
 
-        /* Sidebar styling */
-        #sidebar {
-            position: sticky; /* Make sidebar sticky */
-            top: 80px; /* Adjust based on header height */
-            height: calc(100vh - 100px); /* Full height minus header and some padding */
-            overflow-y: auto; /* Scrollable if content exceeds height */
-            @apply md:w-full lg:w-1/4 order-2 lg:order-1 bg-white p-6 rounded-xl shadow-lg h-fit mb-6 md:mb-0 transition-all duration-300;
+        #sidebar { /* This is now the main filter section, not a sidebar */
+            @apply w-full bg-white p-4 sm:p-6 rounded-xl shadow-lg mb-6 transition-all duration-300;
         }
-         /* Custom scrollbar for sidebar */
         #sidebar::-webkit-scrollbar { width: 5px; }
         #sidebar::-webkit-scrollbar-track { background: #f9fafb; }
         #sidebar::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 10px; }
 
 
-        /* Feedback message styling for forms (used in SweetAlerts) */
         .feedback-base { @apply text-sm mt-2 p-2.5 rounded-md border; }
         .feedback-info { @apply feedback-base bg-blue-50 border-blue-300 text-blue-700; }
         .feedback-success { @apply feedback-base bg-green-50 border-green-300 text-green-700; }
         .feedback-error { @apply feedback-base bg-red-50 border-red-300 text-red-700; }
 
-        /* SweetAlert input styling */
         .swal2-input, .swal2-textarea, #swal-establishment-category, #swal-establishment-governorate {
              @apply mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm;
         }
-        /* Custom radio button styling within SweetAlert */
         .swal2-html-container input[type="radio"] {
             @apply appearance-none border-2 border-gray-300 rounded-full w-4 h-4 mt-0.5 transition duration-200 ease-in-out align-middle;
         }
         .swal2-html-container input[type="radio"]:checked {
             @apply border-indigo-600 bg-indigo-600;
-            /* Custom checkmark using SVG */
             background-image: url("data:image/svg+xml,%3csvg viewBox='0 0 16 16' fill='white' xmlns='http://www.w3.org/2000/svg'%3e%3ccircle cx='8' cy='8' r='3'/%3e%3c/svg%3e");
         }
          .swal2-html-container input[type="radio"]:focus {
-            @apply ring-2 ring-offset-1 ring-indigo-400; /* Focus ring */
+            @apply ring-2 ring-offset-1 ring-indigo-400; 
         }
-         /* Text alignment for labels in SweetAlert based on document direction */
          html[dir="rtl"] .swal2-html-container .label-text { text-align: right; }
          html[dir="ltr"] .swal2-html-container .label-text { text-align: left; }
          .swal2-html-container .label-text { @apply block text-sm font-semibold text-gray-700; }
 
 
-        /* General button and input field styling */
         .btn-primary {
-            @apply bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 px-6 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transform active:scale-95;
+            @apply bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 px-4 sm:px-6 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transform active:scale-95 text-sm sm:text-base;
         }
         .btn-secondary {
-             @apply bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-2.5 px-6 rounded-lg shadow-sm hover:shadow-md transition-all duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 transform active:scale-95;
+             @apply bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-2.5 px-4 sm:px-6 rounded-lg shadow-sm hover:shadow-md transition-all duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 transform active:scale-95 text-sm sm:text-base;
         }
         .input-field {
-            @apply mt-1 block w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent sm:text-sm transition-shadow duration-200;
+            @apply mt-1 block w-full px-3 sm:px-4 py-2 sm:py-2.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm sm:text-base transition-shadow duration-200;
         }
-        .input-field:focus { @apply shadow-md; } /* Enhanced focus style */
+        .input-field:focus { @apply shadow-md; } 
         
-        /* Ensure label-text directionality is handled by Tailwind or specific CSS */
         html[dir="rtl"] .label-text { text-align: right; }
         html[dir="ltr"] .label-text { text-align: left; }
         .label-text {
             @apply block text-sm font-semibold text-gray-700;
         }
 
-        /* Leaflet popup styling */
         .leaflet-popup-content-wrapper {
-            border-radius: 8px; /* Rounded corners for popups */
+            border-radius: 8px; 
         }
         .leaflet-popup-content {
-            font-family: 'Cairo', sans-serif; /* Ensure font consistency */
+            font-family: 'Cairo', sans-serif; 
         }
-        .leaflet-popup-content .show-details-btn-map { /* Style for "View Details" button in map popup */
-            color: #4f46e5; /* Indigo color */
+        .leaflet-popup-content .show-details-btn-map { 
+            color: #4f46e5; 
             text-decoration: underline;
-            font-size: 0.75rem; /* Small text */
+            font-size: 0.75rem; 
             margin-top: 4px;
             display: inline-block;
         }
         .leaflet-popup-content .show-details-btn-map:hover {
-            color: #3730a3; /* Darker indigo on hover */
+            color: #3730a3; 
         }
-        /* SweetAlert HTML container text alignment */
         html[dir="rtl"] .swal2-html-container { text-align: right !important; }
         html[dir="ltr"] .swal2-html-container { text-align: left !important; }
 
-        /* Location picker map styling within SweetAlert */
         #location-picker-map-swal {
-            height: 350px; /* Or 400px as before, adjust as needed */
+            height: 350px; 
             width: 100%;
             margin-top: 10px;
-            border: 1px solid #d1d5db; /* Gray border */
-            border-radius: 0.375rem; /* Rounded corners */
+            border: 1px solid #d1d5db; 
+            border-radius: 0.375rem; 
         }
-        /* Adjust icon margins based on direction */
         html[dir="rtl"] .fas[class*="mr-"], html[dir="rtl"] .fa[class*="mr-"] { margin-right: 0 !important; margin-left: 0.5rem !important; }
         html[dir="ltr"] .fas[class*="ml-"], html[dir="ltr"] .fa[class*="ml-"] { margin-left: 0 !important; margin-right: 0.5rem !important; }
 
-        /* RTL specific for SweetAlert input icons */
         html[dir="rtl"] .swal2-html-container .relative .absolute.inset-y-0.right-0 { right: auto; left: 0; padding-right:0; padding-left: 0.75rem; }
         html[dir="rtl"] .swal2-html-container .relative input.pr-10 { padding-right: 0.75rem; padding-left: 2.5rem; }
         
-        /* RTL for radio button labels in SweetAlert */
         html[dir="rtl"] .swal2-html-container input[type="radio"] + label { margin-right: 0.5rem; margin-left: 0;}
         html[dir="ltr"] .swal2-html-container input[type="radio"] + label { margin-left: 0.5rem; margin-right: 0;}
+
+        /* Header adjustments for mobile */
+        @media (max-width: 640px) { /* sm breakpoint */
+            header .container > div { /* Target the flex container for buttons */
+                flex-direction: column;
+                align-items: stretch; /* Make buttons full width */
+                width: 100%;
+            }
+            header .container > div > * { /* Target direct children of the button container */
+                margin-top: 0.5rem; /* Add some space between stacked items */
+                width: 100%; /* Make buttons take full width */
+            }
+             header .container > div > *:first-child {
+                margin-top: 0;
+            }
+            #user-auth-status {
+                text-align: center;
+            }
+            #language-switcher select {
+                width: 100%;
+                text-align: center;
+            }
+        }
 
     </style>
 </head>
 <body class="bg-slate-100"> <header class="bg-white text-gray-800 shadow-lg sticky top-0 z-30">
-        <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-wrap justify-between items-center">
-            <a href="#" id="logo-link" class="text-3xl font-extrabold text-indigo-600 hover:text-indigo-700 transition-colors">
+        <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-3 sm:py-4 flex flex-wrap justify-between items-center">
+            <a href="#" id="logo-link" class="text-2xl sm:text-3xl font-extrabold text-indigo-600 hover:text-indigo-700 transition-colors">
                 <i class="fas fa-map-signs"></i><span data-translate-key="logo_text" class="mr-2 ml-2">دليلك</span>
             </a>
-            <div class="flex items-center space-x-3 space-x-reverse mt-3 sm:mt-0"> <div id="language-switcher" class="ml-2 mr-2"> <select id="lang-select" class="input-field text-sm py-1 px-2 bg-gray-50 border-gray-200 rounded-md focus:ring-indigo-500 focus:border-indigo-500">
-                        </select>
+            <!-- Auth and Action Buttons Wrapper -->
+            <div class="flex flex-wrap items-center gap-2 mt-3 sm:mt-0 w-full sm:w-auto justify-center sm:justify-end">
+                <div id="language-switcher" class="ml-2 mr-2"> 
+                    <select id="lang-select" class="input-field text-xs sm:text-sm py-1 px-2 bg-gray-50 border-gray-200 rounded-md focus:ring-indigo-500 focus:border-indigo-500">
+                    </select>
                 </div>
-                <span id="user-auth-status" class="text-sm text-gray-600 px-3 py-1.5 bg-gray-100 rounded-lg shadow-inner" data-translate-key="user_auth_status_visitor">أنت تتصفح كـ <span class="font-semibold">زائر</span> <i class="fas fa-user-secret text-gray-400"></i></span>
-                <button id="login-register-btn" class="btn-primary text-sm"><i class="fas fa-sign-in-alt"></i> <span data-translate-content="true" data-translate-key="login_register_btn">تسجيل/إنشاء حساب</span></button>
-                <div id="add-establishment-btn-container" class="hidden"> <button id="open-add-establishment-modal-btn" class="bg-amber-500 hover:bg-amber-600 text-white font-semibold py-2.5 px-4 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 text-sm"><i class="fas fa-plus-circle"></i> <span data-translate-content="true" data-translate-key="add_establishment_btn">أضف منشأتك</span></button>
+                <span id="user-auth-status" class="text-xs sm:text-sm text-gray-600 px-2 py-1 sm:px-3 sm:py-1.5 bg-gray-100 rounded-lg shadow-inner order-first sm:order-none" data-translate-key="user_auth_status_visitor">أنت تتصفح كـ <span class="font-semibold">زائر</span> <i class="fas fa-user-secret text-gray-400"></i></span>
+                <button id="login-register-btn" class="btn-primary text-xs sm:text-sm px-3 py-1.5 sm:px-4 sm:py-2.5"><i class="fas fa-sign-in-alt"></i> <span data-translate-content="true" data-translate-key="login_register_btn">تسجيل/إنشاء حساب</span></button>
+                <div id="add-establishment-btn-container" class="hidden"> 
+                    <button id="open-add-establishment-modal-btn" class="bg-amber-500 hover:bg-amber-600 text-white font-semibold py-1.5 px-3 sm:py-2.5 sm:px-4 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 text-xs sm:text-sm"><i class="fas fa-plus-circle"></i> <span data-translate-content="true" data-translate-key="add_establishment_btn">أضف منشأتك</span></button>
                 </div>
-                <div id="my-establishments-btn-container" class="hidden"> <button id="show-my-establishments-btn" class="bg-sky-500 hover:bg-sky-600 text-white font-semibold py-2.5 px-4 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 text-sm"><i class="fas fa-store"></i> <span data-translate-content="true" data-translate-key="my_establishments_btn">منشآتي</span></button>
+                <div id="my-establishments-btn-container" class="hidden"> 
+                    <button id="show-my-establishments-btn" class="bg-sky-500 hover:bg-sky-600 text-white font-semibold py-1.5 px-3 sm:py-2.5 sm:px-4 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 text-xs sm:text-sm"><i class="fas fa-store"></i> <span data-translate-content="true" data-translate-key="my_establishments_btn">منشآتي</span></button>
                 </div>
-                <div id="manage-paid-ads-btn-container" class="hidden"> <button id="open-manage-paid-ads-modal-btn" class="bg-teal-500 hover:bg-teal-600 text-white font-semibold py-2.5 px-4 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 text-sm"><i class="fas fa-ad"></i> <span data-translate-content="true" data-translate-key="manage_paid_ads_btn">إدارة الإعلانات</span></button>
+                <div id="manage-paid-ads-btn-container" class="hidden"> 
+                    <button id="open-manage-paid-ads-modal-btn" class="bg-teal-500 hover:bg-teal-600 text-white font-semibold py-1.5 px-3 sm:py-2.5 sm:px-4 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 text-xs sm:text-sm"><i class="fas fa-ad"></i> <span data-translate-content="true" data-translate-key="manage_paid_ads_btn">إدارة الإعلانات</span></button>
                 </div>
-                <button id="logout-btn" class="hidden bg-red-500 hover:bg-red-600 text-white font-semibold py-2.5 px-4 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 text-sm"><i class="fas fa-sign-out-alt"></i> <span data-translate-content="true" data-translate-key="logout_btn">تسجيل الخروج</span></button>
+                <button id="logout-btn" class="hidden bg-red-500 hover:bg-red-600 text-white font-semibold py-1.5 px-3 sm:py-2.5 sm:px-4 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 text-xs sm:text-sm"><i class="fas fa-sign-out-alt"></i> <span data-translate-content="true" data-translate-key="logout_btn">تسجيل الخروج</span></button>
             </div>
         </div>
     </header>
 
-    <div id="paid-ads-banner" class="container mx-auto px-4 sm:px-6 lg:px-8 py-3 my-6 hidden">
+    <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <!-- Paid Ads Banner Section -->
+        <div id="paid-ads-banner" class="hidden">
+            <!-- Content will be loaded by JS -->
         </div>
 
-    <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col lg:flex-row gap-x-8">
-
-        <aside id="sidebar" class="w-full lg:w-1/4 order-2 lg:order-1 mb-6 lg:mb-0"> <h2 class="text-xl font-bold text-gray-800 mb-5 border-b-2 border-gray-200 pb-3">
+        <!-- Filters Section (Moved Here) -->
+        <aside id="sidebar" class="w-full bg-white p-4 sm:p-6 rounded-xl shadow-lg mb-6 transition-all duration-300">
+            <h2 class="text-xl font-bold text-gray-800 mb-4 sm:mb-5 border-b-2 border-gray-200 pb-3">
                 <i class="fas fa-filter text-indigo-500"></i> <span data-translate-key="filter_search_title" class="mr-2 ml-2">فلترة البحث</span>
             </h2>
-
-            <div class="mb-6">
-                <label for="category-filter" class="label-text mb-1.5" data-translate-key="category_filter_label">التصنيف:</label>
-                <select id="category-filter" class="input-field">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-end">
+                <div>
+                    <label for="name-search-input" class="label-text mb-1.5" data-translate-key="search_by_name_label">البحث بالاسم:</label>
+                    <input type="text" id="name-search-input" data-translate-placeholder="search_by_name_placeholder" placeholder="أدخل اسم المنشأة..." class="input-field w-full">
+                </div>
+                <div>
+                    <label for="category-filter" class="label-text mb-1.5" data-translate-key="category_filter_label">التصنيف:</label>
+                    <select id="category-filter" class="input-field w-full">
                     </select>
-            </div>
-
-            <div class="mb-6">
-                <label for="governorate-filter" class="label-text mb-1.5" data-translate-key="governorate_filter_label">المحافظة:</label>
-                <select id="governorate-filter" class="input-field">
+                </div>
+                <div>
+                    <label for="governorate-filter" class="label-text mb-1.5" data-translate-key="governorate_filter_label">المحافظة:</label>
+                    <select id="governorate-filter" class="input-field w-full">
                     </select>
+                </div>
+                <div class="sm:col-span-2 lg:col-span-1 lg:mt-0"> <!-- Button spans full on small, adjusts on larger -->
+                     <button id="apply-filters-btn" class="btn-primary w-full mt-4 sm:mt-0"><i class="fas fa-search mr-2 ml-2"></i><span data-translate-key="apply_filters_btn">تطبيق الفلاتر</span></button>
+                </div>
             </div>
-
-            <hr class="my-8 border-gray-200"> <h2 class="text-xl font-bold text-gray-800 mb-4 border-b-2 border-gray-200 pb-3">
+             <hr class="my-6 sm:my-8 border-gray-200"> 
+             <h2 class="text-lg sm:text-xl font-bold text-gray-800 mb-3 sm:mb-4 border-b-2 border-gray-200 pb-2 sm:pb-3">
                 <i class="fas fa-link text-indigo-500"></i> <span data-translate-key="useful_links_title" class="mr-2 ml-2">روابط مفيدة</span>
             </h2>
-            <nav class="space-y-2">
-                <a href="#" id="complaints-suggestions-link-sidebar" class="flex items-center text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg p-2.5 transition-all duration-200 font-medium">
+            <nav class="space-y-1.5 sm:space-y-2">
+                <a href="#" id="complaints-suggestions-link" class="flex items-center text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg p-2 sm:p-2.5 transition-all duration-200 font-medium text-sm sm:text-base">
                     <i class="fas fa-envelope-open-text w-5 text-center"></i><span data-translate-key="complaints_suggestions_link" class="mr-3 ml-3">شكاوى واقتراحات</span>
                 </a>
-                <a href="#" id="about-us-link" class="flex items-center text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg p-2.5 transition-all duration-200 font-medium">
+                <a href="#" id="about-us-link" class="flex items-center text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg p-2 sm:p-2.5 transition-all duration-200 font-medium text-sm sm:text-base">
                     <i class="fas fa-info-circle w-5 text-center"></i><span data-translate-key="about_us_link" class="mr-3 ml-3">من نحن</span>
                 </a>
             </nav>
         </aside>
 
-        <main id="main-content-area" class="w-full lg:w-3/4 order-1 lg:order-2"> <h2 id="main-content-area-title" class="text-2xl sm:text-3xl font-bold text-gray-800 mb-6" data-translate-key="latest_establishments_title">أحدث المنشآت المضافة</h2>
+        <!-- Main content: Establishments Grid and Map -->
+        <main id="main-content-area" class="w-full"> 
+            <h2 id="main-content-area-title" class="text-2xl sm:text-3xl font-bold text-gray-800 mb-6" data-translate-key="latest_establishments_title">أحدث المنشآت المضافة</h2>
             <div id="loading-indicator" class="hidden justify-center items-center py-12 flex-col">
                 <svg class="animate-spin h-12 w-12 text-indigo-500 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -2210,22 +2177,23 @@
                 <p class="mt-1 text-base text-gray-500" data-translate-key="no_results_message_text">لم يتم العثور على منشآت تطابق بحثك. حاول تغيير الفلاتر.</p>
             </div>
             <div id="establishments-container" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
-                </div>
+            </div>
              <div id="main-map-section" class="mt-10 bg-white p-4 rounded-xl shadow-lg">
                 <div class="flex flex-col sm:flex-row justify-between items-center mb-4 gap-2">
-                    <h2 id="main-map-section-title" class="text-xl sm:text-2xl font-bold text-gray-800 text-center sm:text-right"> <i class="fas fa-map-marked-alt text-indigo-600"></i> <span data-translate-key="interactive_map_title" class="mr-2 ml-2">الخريطة التفاعلية</span>
+                    <h2 id="main-map-section-title" class="text-xl sm:text-2xl font-bold text-gray-800 text-center sm:text-right"> 
+                        <i class="fas fa-map-marked-alt text-indigo-600"></i> <span data-translate-key="interactive_map_title" class="mr-2 ml-2">الخريطة التفاعلية</span>
                     </h2>
-                    <button id="locate-user-btn" class="btn-secondary text-sm py-2 px-3 w-full sm:w-auto"> <i class="fas fa-location-arrow"></i> <span data-translate-content="true" data-translate-key="locate_user_btn_map">تحديد موقعي على الخريطة</span>
+                    <button id="locate-user-btn" class="btn-secondary text-sm py-2 px-3 w-full sm:w-auto"> 
+                        <i class="fas fa-location-arrow"></i> <span data-translate-content="true" data-translate-key="locate_user_btn_map">تحديد موقعي على الخريطة</span>
                     </button>
                 </div>
                 <div id="main-map-container" class="w-full h-80 sm:h-96 md:h-[500px] rounded-lg border border-gray-300 bg-gray-100">
-                    </div>
+                </div>
                 <p class="text-xs text-gray-500 mt-2 text-center" data-translate-key="map_permission_note">قد يطلب المتصفح الإذن للوصول إلى موقعك لعرضه على الخريطة.</p>
             </div>
         </main>
     </div>
 
-    <!-- Manage Paid Ads Modal (HTML Modal - REMAINS UNCHANGED) -->
     <div id="manage-paid-ads-modal" class="modal-container hidden">
         <div class="modal-content max-w-md">
             <h2 class="text-2xl font-bold mb-6 text-center text-gray-800" data-translate-key="manage_paid_ads_modal_title">إدارة الإعلانات المدفوعة</h2>
@@ -2235,7 +2203,9 @@
                     <input type="text" id="paid-ad-establishment-id" required data-translate-placeholder="establishment_id_placeholder" placeholder="أدخل ID المنشأة لتفعيل/إلغاء الإعلان" class="input-field">
                     <p class="text-xs text-gray-500 mt-1" data-translate-key="establishment_id_note">يمكنك الحصول على ID المنشأة من لوحة تحكم Firebase.</p>
                 </div>
-                <div id="manage-paid-ads-feedback"></div> <div class="flex flex-col-reverse sm:flex-row items-center justify-end gap-3 pt-4 border-t mt-6"> <button type="button" data-close-modal="manage-paid-ads-modal" class="btn-secondary w-full sm:w-auto" data-translate-key="cancel_btn">إلغاء</button>
+                <div id="manage-paid-ads-feedback"></div> 
+                <div class="flex flex-col-reverse sm:flex-row items-center justify-end gap-3 pt-4 border-t mt-6"> 
+                    <button type="button" data-close-modal="manage-paid-ads-modal" class="btn-secondary w-full sm:w-auto" data-translate-key="cancel_btn">إلغاء</button>
                     <button type="submit" class="btn-primary bg-teal-500 hover:bg-teal-600 focus:ring-teal-500 w-full sm:w-auto" data-translate-key="toggle_ad_status_btn">تبديل حالة الإعلان</button>
                 </div>
             </form>
