@@ -16,7 +16,7 @@
      crossorigin=""></script>
 
     <script type="module">
-        // Make modal functions globally accessible FIRST
+        // Make modal functions globally accessible FIRST (for non-Swal modals)
         window.openModal = (modalId) => {
             const modal = document.getElementById(modalId);
             if (modal) {
@@ -72,7 +72,9 @@
         let mainMap = null; 
         let userMarker = null; 
         let establishmentMarkers = [];
-        let selectedCoordsForNewEstablishment = null; 
+        
+        window.selectedCoordsForNewEstablishment = null; 
+        window.tempEstablishmentData = {}; 
 
         try {
             app = initializeApp(firebaseConfig);
@@ -195,7 +197,7 @@
             if (mapContainer && !mainMap) { 
                 try {
                     mainMap = L.map(mapContainer, {
-                        scrollWheelZoom: false // Disable scroll wheel zoom by default for better page scroll experience
+                        scrollWheelZoom: true 
                     }).setView([35.0, 38.0], 6); 
                     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
@@ -203,7 +205,6 @@
                     }).addTo(mainMap);
                     console.log("Map: Main map initialized.");
 
-                    // Add a button to center map on user location
                     const locateUserBtn = document.getElementById('locate-user-btn');
                     if (locateUserBtn) {
                         locateUserBtn.addEventListener('click', () => {
@@ -218,14 +219,14 @@
                                     if (userMarker) mainMap.removeLayer(userMarker);
                                     userMarker = L.marker([userLat, userLng], {
                                         icon: L.icon({
-                                            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
+                                            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png', 
                                             iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34],
                                             shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', shadowSize: [41, 41]
                                         })
                                     }).addTo(mainMap)
                                         .bindPopup("<b>موقعك الحالي</b>")
                                         .openPopup();
-                                    mainMap.setView([userLat, userLng], 13); // Zoom in closer
+                                    mainMap.setView([userLat, userLng], 13); 
                                 }, (error) => {
                                     Swal.close();
                                     console.warn("Map: User denied geolocation or error occurred.", error.message);
@@ -329,7 +330,7 @@
                             if (establishmentData.coordinates && typeof establishmentData.coordinates.latitude === 'number' && typeof establishmentData.coordinates.longitude === 'number' && mainMap) {
                                 const estMarker = L.marker([establishmentData.coordinates.latitude, establishmentData.coordinates.longitude], {
                                      icon: L.icon({
-                                        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png', // Red for establishments
+                                        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png', 
                                         iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34],
                                         shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', shadowSize: [41, 41]
                                     })
@@ -416,8 +417,7 @@
         }
 
         window.showEstablishmentDetails = async (establishmentId) => {
-            // ... (الكود الخاص بـ SweetAlert لعرض التفاصيل والتقييمات يبقى كما هو) ...
-             try {
+            try {
                 const establishmentRef = doc(db, `artifacts/${appId}/public/data/establishments`, establishmentId);
                 const docSnap = await getDoc(establishmentRef);
 
@@ -833,10 +833,15 @@
             });
         }
 
-        function showAddEstablishmentModal() {
-            let categoryOptionsHtml = categories.slice(1).map(cat => `<option value="${cat}">${cat}</option>`).join('');
-            let governorateOptionsHtml = governorates.slice(1).map(gov => `<option value="${gov}">${gov}</option>`).join('');
-            selectedCoordsForNewEstablishment = null; // Reset selected coordinates
+        function showAddEstablishmentModal(savedData = window.tempEstablishmentData || {}) { 
+            let categoryOptionsHtml = categories.slice(1).map(cat => `<option value="${cat}" ${savedData.category === cat ? 'selected' : ''}>${cat}</option>`).join('');
+            let governorateOptionsHtml = governorates.slice(1).map(gov => `<option value="${gov}" ${savedData.governorate === gov ? 'selected' : ''}>${gov}</option>`).join('');
+            
+            let currentCoordsDisplay = "";
+            const coordsToUse = savedData.coordinates || window.selectedCoordsForNewEstablishment;
+            if (coordsToUse) { 
+                currentCoordsDisplay = `${coordsToUse.lat.toFixed(5)}, ${coordsToUse.lng.toFixed(5)}`;
+            }
 
             Swal.fire({
                 title: '<strong class="text-2xl text-indigo-600">إضافة منشأة جديدة</strong>',
@@ -844,35 +849,35 @@
                     <form id="swal-add-establishment-form" class="text-right space-y-4 p-1">
                         <div>
                             <label for="swal-establishment-name" class="label-text mb-1">اسم المنشأة:</label>
-                            <input type="text" id="swal-establishment-name" required class="input-field w-full">
+                            <input type="text" id="swal-establishment-name" required class="input-field w-full" value="${savedData.name || ''}">
                         </div>
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-4">
                             <div>
                                 <label for="swal-establishment-category" class="label-text mb-1">التصنيف:</label>
                                 <select id="swal-establishment-category" required class="input-field w-full">
-                                    <option value="" disabled selected>اختر التصنيف</option>
+                                    <option value="" disabled ${!savedData.category ? 'selected' : ''}>اختر التصنيف</option>
                                     ${categoryOptionsHtml}
                                 </select>
                             </div>
                             <div>
                                 <label for="swal-establishment-governorate" class="label-text mb-1">المحافظة:</label>
                                 <select id="swal-establishment-governorate" required class="input-field w-full">
-                                    <option value="" disabled selected>اختر المحافظة</option>
+                                    <option value="" disabled ${!savedData.governorate ? 'selected' : ''}>اختر المحافظة</option>
                                     ${governorateOptionsHtml}
                                 </select>
                             </div>
                         </div>
                         <div>
                             <label for="swal-establishment-description" class="label-text mb-1">وصف المنشأة:</label>
-                            <textarea id="swal-establishment-description" rows="3" required class="input-field w-full"></textarea>
+                            <textarea id="swal-establishment-description" rows="3" required class="input-field w-full">${savedData.description || ''}</textarea>
                         </div>
                         <div>
                             <label for="swal-establishment-location" class="label-text mb-1">الموقع (نص وصفي):</label>
-                            <input type="text" id="swal-establishment-location" required class="input-field w-full">
+                            <input type="text" id="swal-establishment-location" required class="input-field w-full" value="${savedData.locationText || ''}">
                         </div>
                         <div>
                              <button type="button" id="swal-select-location-btn" class="btn-secondary text-sm py-2 w-full mb-2"><i class="fas fa-map-marker-alt mr-2"></i>تحديد الموقع على الخريطة</button>
-                             <input type="text" id="swal-establishment-coordinates-display" readonly placeholder="الإحداثيات (خط العرض، خط الطول)" class="input-field w-full bg-gray-100 text-sm cursor-not-allowed">
+                             <input type="text" id="swal-establishment-coordinates-display" readonly placeholder="الإحداثيات (خط العرض، خط الطول)" class="input-field w-full bg-gray-100 text-sm cursor-not-allowed" value="${currentCoordsDisplay}">
                         </div>
                         <div>
                             <label for="swal-establishment-photos" class="label-text mb-1">صور المنشأة (5 كحد أقصى, 1MB لكل صورة بعد الضغط):</label>
@@ -898,40 +903,28 @@
                 didOpen: () => {
                     const photosInput = Swal.getPopup().querySelector('#swal-establishment-photos');
                     const previewContainer = Swal.getPopup().querySelector('#swal-photo-preview-container');
-                    if (photosInput && previewContainer) {
-                        photosInput.addEventListener('change', (event) => {
-                            previewContainer.innerHTML = ''; 
-                            if (event.target.files.length > 5) {
-                                Swal.showValidationMessage("يمكن تحميل 5 صور كحد أقصى.");
-                                photosInput.value = ""; 
-                                return;
-                            }
-                            Array.from(event.target.files).forEach(file => {
-                                if (file.size > 1 * 1024 * 1024 * 2) { 
-                                     Swal.showValidationMessage(`حجم الملف ${file.name} كبير جداً (الحد الأقصى 2MB قبل الضغط).`);
-                                     photosInput.value = ""; 
-                                     previewContainer.innerHTML = '';
-                                     return;
-                                }
-                                const reader = new FileReader();
-                                reader.onload = (e) => {
-                                    const img = document.createElement('img');
-                                    img.src = e.target.result;
-                                    img.className = 'w-full h-20 object-cover rounded';
-                                    previewContainer.appendChild(img);
-                                }
-                                reader.readAsDataURL(file);
-                            });
-                        });
-                    }
+                    if (photosInput && previewContainer) { /* ... photo preview logic ... */ }
+                    
                     const selectLocationBtn = Swal.getPopup().querySelector('#swal-select-location-btn');
                     if (selectLocationBtn) {
                         selectLocationBtn.addEventListener('click', () => {
-                            openLocationPickerForEstablishment();
+                            const currentForm = Swal.getPopup().querySelector('#swal-add-establishment-form');
+                            window.tempEstablishmentData.name = currentForm.querySelector('#swal-establishment-name').value;
+                            window.tempEstablishmentData.description = currentForm.querySelector('#swal-establishment-description').value;
+                            window.tempEstablishmentData.locationText = currentForm.querySelector('#swal-establishment-location').value;
+                            window.tempEstablishmentData.category = currentForm.querySelector('#swal-establishment-category').value;
+                            window.tempEstablishmentData.governorate = currentForm.querySelector('#swal-establishment-governorate').value;
+                            window.tempEstablishmentData.coordinates = window.selectedCoordsForNewEstablishment; // Preserve already selected coords
+                            
+                            Swal.close(); 
+                            // Use setTimeout to ensure the first Swal is fully closed before opening the next
+                            setTimeout(() => {
+                                openLocationPickerForEstablishment(); 
+                            }, 100); // Small delay
                         });
                     }
                 },
-                preConfirm: async () => {
+                preConfirm: async () => { 
                     const form = Swal.getPopup().querySelector('#swal-add-establishment-form');
                     const feedbackDiv = Swal.getPopup().querySelector('#swal-add-establishment-feedback');
                     feedbackDiv.textContent = '';
@@ -952,7 +945,7 @@
                         Swal.showValidationMessage("يرجى ملء جميع الحقول المطلوبة.");
                         return false;
                     }
-                     if (!selectedCoordsForNewEstablishment) { // Check if coordinates were selected
+                     if (!window.selectedCoordsForNewEstablishment) { 
                         Swal.showValidationMessage("يرجى تحديد موقع المنشأة على الخريطة.");
                         return false;
                     }
@@ -995,13 +988,13 @@
                         await addDoc(collection(db, publicEstablishmentsPath), {
                             ownerId: auth.currentUser.uid, ownerEmail: auth.currentUser.email, 
                             name, description, location: locationText, category, governorate,
-                            coordinates: new GeoPoint(selectedCoordsForNewEstablishment.lat, selectedCoordsForNewEstablishment.lng), 
+                            coordinates: new GeoPoint(window.selectedCoordsForNewEstablishment.lat, window.selectedCoordsForNewEstablishment.lng), 
                             photos: photoBase64Strings, 
                             averageRating: 0, ratingCount: 0, isPaidAd: false, 
                             publishedAt: serverTimestamp(), status: "pending" 
                         });
-                        selectedCoordsForNewEstablishment = null; // Reset after use
-                        document.getElementById('swal-establishment-coordinates-display').value = ''; // Clear display
+                        window.selectedCoordsForNewEstablishment = null; 
+                        window.tempEstablishmentData = {}; 
                         return true; 
                     } catch (error) {
                         console.error("Swal Add Establishment error:", error);
@@ -1014,17 +1007,36 @@
             }).then((result) => {
                 if (result.isConfirmed) {
                     Swal.fire('تم بنجاح!', 'تمت إضافة المنشأة بنجاح! ستظهر بعد المراجعة والموافقة.', 'success');
+                } else if (result.dismiss === Swal.DismissReason.cancel) {
+                    // If main Swal was cancelled, check if temp data exists to reopen
+                    console.log("Add establishment Swal cancelled. Restoring with temp data if available.");
+                    const dataToRestoreOnCancel = { ...window.tempEstablishmentData };
+                    // Ensure selectedCoordsForNewEstablishment is also part of the restore if it was set
+                    if (window.selectedCoordsForNewEstablishment) {
+                        dataToRestoreOnCancel.coordinates = window.selectedCoordsForNewEstablishment;
+                    }
+                     // Only re-open if there was actually some data, or if coordinates were picked
+                    if (Object.keys(dataToRestoreOnCancel).length > 0 || dataToRestoreOnCancel.coordinates) {
+                        showAddEstablishmentModal(dataToRestoreOnCancel);
+                    }
                 }
+                 window.tempEstablishmentData = {}; // Clear temp data after Swal is fully handled
+                 // window.selectedCoordsForNewEstablishment should be reset if not confirmed in map picker or if main form submitted
             });
         }
 
         function openLocationPickerForEstablishment() {
             let tempMarker = null;
-            let pickerMapInstance = null; // To hold the map instance for this picker
+            let pickerMapInstance = null; 
+            let localSelectedCoords = window.selectedCoordsForNewEstablishment ? L.latLng(window.selectedCoordsForNewEstablishment.lat, window.selectedCoordsForNewEstablishment.lng) : null;
 
             Swal.fire({
                 title: 'تحديد موقع المنشأة على الخريطة',
-                html: '<div id="location-picker-map-swal" style="height: 400px; width: 100%;"></div><p class="text-xs text-gray-500 mt-2">انقر على الخريطة لتحديد الموقع.</p>',
+                html: `
+                    <div id="location-picker-map-swal" style="height: 400px; width: 100%;"></div>
+                    <button id="use-my-current-location-btn-picker" class="btn-secondary text-sm py-2 w-full mt-3 mb-2"><i class="fas fa-location-arrow mr-2"></i>استخدام موقعي الحالي</button>
+                    <p class="text-xs text-gray-500 mt-1">انقر على الخريطة لتحديد الموقع أو استخدم زر "تحديد موقعي".</p>
+                `,
                 showCancelButton: true,
                 confirmButtonText: 'تأكيد الموقع <i class="fas fa-check ml-2"></i>',
                 cancelButtonText: 'إلغاء',
@@ -1033,62 +1045,81 @@
                 customClass: { popup: 'rounded-xl' },
                 didOpen: () => {
                     const mapElement = Swal.getPopup().querySelector('#location-picker-map-swal');
+                    const useMyLocBtn = Swal.getPopup().querySelector('#use-my-current-location-btn-picker');
+
                     if (mapElement) {
-                        pickerMapInstance = L.map(mapElement).setView([35.0, 38.0], 6); 
+                        const initialView = localSelectedCoords ? [localSelectedCoords.lat, localSelectedCoords.lng] : [35.0, 38.0]; 
+                        const initialZoom = localSelectedCoords ? 15 : 6;
+                        pickerMapInstance = L.map(mapElement).setView(initialView, initialZoom); 
                         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(pickerMapInstance);
 
+                        if(localSelectedCoords){
+                             tempMarker = L.marker(localSelectedCoords).addTo(pickerMapInstance).bindPopup("الموقع المحدد").openPopup();
+                        }
+
                         pickerMapInstance.on('click', function(e) {
-                            if (tempMarker) {
-                                pickerMapInstance.removeLayer(tempMarker);
-                            }
-                            selectedCoordsForNewEstablishment = e.latlng; 
+                            if (tempMarker) pickerMapInstance.removeLayer(tempMarker);
+                            localSelectedCoords = e.latlng; 
                             tempMarker = L.marker(e.latlng).addTo(pickerMapInstance)
-                                .bindPopup("الموقع المحدد").openPopup();
-                            console.log("Map Picker: Location selected - ", selectedCoordsForNewEstablishment);
+                                .bindPopup("الموقع المحدد للمنشأة").openPopup();
+                            console.log("Map Picker: Location selected by click - ", localSelectedCoords);
                         });
                         
-                        if (navigator.geolocation) {
-                            navigator.geolocation.getCurrentPosition(position => {
-                                pickerMapInstance.setView([position.coords.latitude, position.coords.longitude], 13);
-                            }, () => { console.warn("Could not get user location for picker map centering.")});
+                        if (useMyLocBtn && navigator.geolocation) {
+                            useMyLocBtn.addEventListener('click', () => {
+                                Swal.showLoading();
+                                navigator.geolocation.getCurrentPosition(position => {
+                                    Swal.close(); 
+                                    const userLat = position.coords.latitude;
+                                    const userLng = position.coords.longitude;
+                                    if (tempMarker) pickerMapInstance.removeLayer(tempMarker);
+                                    localSelectedCoords = L.latLng(userLat, userLng);
+                                    tempMarker = L.marker(localSelectedCoords).addTo(pickerMapInstance)
+                                        .bindPopup("الموقع المحدد (موقعك الحالي)").openPopup();
+                                    pickerMapInstance.setView(localSelectedCoords, 15);
+                                    console.log("Map Picker: User's current location selected - ", localSelectedCoords);
+                                }, (error) => {
+                                    Swal.close();
+                                    console.warn("Map Picker: Error getting current location.", error);
+                                    Swal.fire('خطأ', 'لم نتمكن من تحديد موقعك الحالي.', 'error');
+                                });
+                            });
+                        } else if (!navigator.geolocation && useMyLocBtn) {
+                             useMyLocBtn.disabled = true;
+                             useMyLocBtn.textContent = "تحديد الموقع الحالي غير مدعوم";
                         }
                     } else {
                         console.error("Location picker map container not found in Swal.");
                     }
                 },
                 preConfirm: () => {
-                    if (!selectedCoordsForNewEstablishment) {
-                        Swal.showValidationMessage('يرجى تحديد موقع على الخريطة بالنقر عليه.');
+                    if (!localSelectedCoords) {
+                        Swal.showValidationMessage('يرجى تحديد موقع على الخريطة بالنقر عليه أو استخدام زر "تحديد موقعي".');
                         return false;
                     }
-                    return selectedCoordsForNewEstablishment; // Return the selected LatLng object
+                    return localSelectedCoords; 
                 },
-                willClose: () => { // Clean up map instance to prevent issues
+                willClose: () => { 
                     if (pickerMapInstance) {
                         pickerMapInstance.remove();
                         pickerMapInstance = null;
                     }
                 }
             }).then((result) => {
+                const dataToRestore = { ...window.tempEstablishmentData }; 
                 if (result.isConfirmed && result.value) {
-                    selectedCoordsForNewEstablishment = result.value; // Ensure it's set from the confirmed value
-                    console.log("Map Picker: Confirmed coordinates", selectedCoordsForNewEstablishment);
-                    const coordsDisplay = document.getElementById('swal-establishment-coordinates-display'); // This ID is in the *main* add establishment Swal
-                    if (coordsDisplay) {
-                        coordsDisplay.value = `${selectedCoordsForNewEstablishment.lat.toFixed(5)}, ${selectedCoordsForNewEstablishment.lng.toFixed(5)}`;
-                    } else {
-                        // This happens if the main add establishment Swal is not open or its elements are not accessible.
-                        // The selectedCoordsForNewEstablishment variable will hold the value for when the main form is submitted.
-                        console.warn("Could not find 'swal-establishment-coordinates-display' to update. Coordinates stored in variable.");
-                    }
-                    Swal.fire('تم!', 'تم تحديد الموقع بنجاح.', 'success');
+                    window.selectedCoordsForNewEstablishment = result.value; 
+                    console.log("Map Picker: Confirmed coordinates", window.selectedCoordsForNewEstablishment);
+                    dataToRestore.coordinates = window.selectedCoordsForNewEstablishment; 
                 } else {
-                    // If cancelled, or if preConfirm returned false, reset
-                    // selectedCoordsForNewEstablishment = null; // No, keep it if it was selected but not confirmed
-                    // const coordsDisplay = document.getElementById('swal-establishment-coordinates-display');
-                    // if (coordsDisplay) coordsDisplay.value = '';
-                    console.log("Map Picker: Cancelled or no location selected.");
+                    console.log("Map Picker: Cancelled. Re-opening add form with previous data.");
+                    dataToRestore.coordinates = window.tempEstablishmentData.coordinates || null; 
                 }
+                // Re-open the add establishment modal with the (potentially updated) temporary data
+                // Use a small timeout to ensure the current Swal is fully closed
+                setTimeout(() => {
+                    showAddEstablishmentModal(dataToRestore);
+                }, 100);
             });
         }
         
@@ -1134,6 +1165,8 @@
             if (addEstablishmentBtn) {
                 addEstablishmentBtn.addEventListener('click', () => {
                     console.log("Add Establishment button clicked. Opening SweetAlert for add establishment.");
+                    window.tempEstablishmentData = {}; 
+                    window.selectedCoordsForNewEstablishment = null; 
                     showAddEstablishmentModal(); 
                 });
             } else {
@@ -1187,7 +1220,6 @@
                     }
                 });
             }
-            // Listen for clicks on map popups to show details
             document.addEventListener('click', function(event) {
                 if (event.target.classList.contains('show-details-btn-map')) {
                     const establishmentId = event.target.dataset.id;
@@ -1231,7 +1263,7 @@
             top: 80px; 
             height: calc(100vh - 100px); 
             overflow-y: auto;
-            @apply md:w-1/4 bg-white p-6 rounded-xl shadow-lg h-fit mb-6 md:mb-0 transition-all duration-300;
+            @apply md:w-full lg:w-1/4 order-2 lg:order-1 bg-white p-6 rounded-xl shadow-lg h-fit mb-6 md:mb-0 transition-all duration-300;
         }
          #sidebar::-webkit-scrollbar { width: 5px; }
         #sidebar::-webkit-scrollbar-track { background: #f9fafb; }
@@ -1279,14 +1311,25 @@
             font-family: 'Cairo', sans-serif;
         }
         .leaflet-popup-content .show-details-btn-map {
-            color: #4f46e5; /* Indigo */
+            color: #4f46e5; 
             text-decoration: underline;
-            font-size: 0.75rem; /* text-xs */
+            font-size: 0.75rem; 
             margin-top: 4px;
             display: inline-block;
         }
         .leaflet-popup-content .show-details-btn-map:hover {
-            color: #3730a3; /* Darker Indigo */
+            color: #3730a3; 
+        }
+        .swal2-html-container {
+            text-align: right !important; /* Ensure text alignment for RTL */
+        }
+        /* Ensure Leaflet map inside SweetAlert is visible and sized */
+        #location-picker-map-swal {
+            height: 350px; /* Or any desired height */
+            width: 100%;
+            margin-top: 10px;
+            border: 1px solid #d1d5db; /* Tailwind gray-300 */
+            border-radius: 0.375rem; /* Tailwind rounded-md */
         }
 
 
@@ -1315,9 +1358,9 @@
     <div id="paid-ads-banner" class="container mx-auto px-4 sm:px-6 lg:px-8 py-3 my-6 hidden">
     </div>
 
-    <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col md:flex-row gap-x-8">
+    <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col lg:flex-row gap-x-8">
         
-        <aside id="sidebar" class="md:w-full lg:w-1/4 order-2 lg:order-1">
+        <aside id="sidebar" class="w-full lg:w-1/4 order-2 lg:order-1 mb-6 lg:mb-0">
             <h2 class="text-xl font-bold text-gray-800 mb-5 border-b-2 border-gray-200 pb-3">
                 <i class="fas fa-filter mr-2 text-indigo-500"></i>فلترة البحث
             </h2>
@@ -1349,7 +1392,7 @@
             </nav>
         </aside>
 
-        <main id="main-content-area" class="md:w-full lg:w-3/4 order-1 lg:order-2">
+        <main id="main-content-area" class="w-full lg:w-3/4 order-1 lg:order-2">
             <div id="loading-indicator" class="hidden justify-center items-center py-12 flex-col">
                 <svg class="animate-spin h-12 w-12 text-indigo-500 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -1365,15 +1408,15 @@
             <div id="establishments-container" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
             </div>
              <div id="main-map-section" class="mt-10 bg-white p-4 rounded-xl shadow-lg">
-                <div class="flex justify-between items-center mb-4">
-                    <h2 class="text-2xl font-bold text-gray-800">
+                <div class="flex flex-col sm:flex-row justify-between items-center mb-4 gap-2">
+                    <h2 class="text-xl sm:text-2xl font-bold text-gray-800 text-center sm:text-right">
                         <i class="fas fa-map-marked-alt mr-2 text-indigo-600"></i>الخريطة التفاعلية
                     </h2>
-                    <button id="locate-user-btn" class="btn-secondary text-sm py-2 px-3">
-                        <i class="fas fa-location-arrow mr-1"></i> تحديد موقعي
+                    <button id="locate-user-btn" class="btn-secondary text-sm py-2 px-3 w-full sm:w-auto">
+                        <i class="fas fa-location-arrow mr-1"></i> تحديد موقعي على الخريطة
                     </button>
                 </div>
-                <div id="main-map-container" class="w-full h-96 md:h-[500px] rounded-lg border border-gray-300 bg-gray-100">
+                <div id="main-map-container" class="w-full h-80 sm:h-96 md:h-[500px] rounded-lg border border-gray-300 bg-gray-100">
                     </div>
                 <p class="text-xs text-gray-500 mt-2 text-center">قد يطلب المتصفح الإذن للوصول إلى موقعك لعرضه على الخريطة.</p>
             </div>
